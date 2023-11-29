@@ -6,29 +6,45 @@ import (
 	"testing"
 )
 
+type StubPostStorage struct {
+	posts map[string]string
+}
+
+func (p *StubPostStorage) GetPost(id string) string {
+	return p.posts[id]
+}
+
 func TestGetPost(t *testing.T) {
+	storage := &StubPostStorage{
+		map[string]string{
+			"1": `{"ID": "1", "Title": "Post 1", "Content": "Post Content"}`,
+			"2": `{"ID": "2", "Title": "Post 2", "Content": "Post Content"}`,
+		},
+	}
+	server := &PostServer{storage}
 
 	t.Run("returns post with id equal to 1", func(t *testing.T) {
+
 		request := newPostRequest("1")
 		response := httptest.NewRecorder()
 
-		PostServer(response, request)
+		server.ServeHTTP(response, request)
 
 		got := response.Body.String()
-		want := `{"ID": "1", "Title": "Post 1", "Content": "Post Content"}`
 
-		assertGotPost(t, got, want)
+		assertGotPost(t, got, storage.posts["1"])
 	})
+
 	t.Run("returns post with id equal to 2", func(t *testing.T) {
+
 		request := newPostRequest("2")
 		response := httptest.NewRecorder()
 
-		PostServer(response, request)
+		server.ServeHTTP(response, request)
 
 		got := response.Body.String()
-		want := `{"ID": "2", "Title": "Post 2", "Content": "Post Content"}`
 
-		assertGotPost(t, got, want)
+		assertGotPost(t, got, storage.posts["2"])
 	})
 }
 

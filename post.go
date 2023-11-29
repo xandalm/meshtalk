@@ -6,10 +6,18 @@ import (
 	"strings"
 )
 
-func PostServer(w http.ResponseWriter, r *http.Request) {
+type PostStorage interface {
+	GetPost(is string) string
+}
+
+type PostServer struct {
+	storage PostStorage
+}
+
+func (p *PostServer) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	postID := strings.TrimPrefix(r.URL.Path, "/posts/")
 
-	fmt.Fprint(w, GetPost(postID))
+	fmt.Fprint(w, p.storage.GetPost(postID))
 }
 
 func GetPost(id string) string {
