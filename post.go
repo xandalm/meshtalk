@@ -17,15 +17,11 @@ type PostServer struct {
 func (p *PostServer) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	postID := strings.TrimPrefix(r.URL.Path, "/posts/")
 
-	fmt.Fprint(w, p.storage.GetPost(postID))
-}
+	foundPost := p.storage.GetPost(postID)
 
-func GetPost(id string) string {
-	if id == "1" {
-		return `{"ID": "1", "Title": "Post 1", "Content": "Post Content"}`
+	if foundPost == "" {
+		w.WriteHeader(http.StatusNotFound)
 	}
-	if id == "2" {
-		return `{"ID": "2", "Title": "Post 2", "Content": "Post Content"}`
-	}
-	return ""
+
+	fmt.Fprint(w, foundPost)
 }

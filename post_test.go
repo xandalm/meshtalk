@@ -32,6 +32,7 @@ func TestGetPost(t *testing.T) {
 
 		got := response.Body.String()
 
+		assertStatus(t, response.Code, http.StatusOK)
 		assertGotPost(t, got, storage.posts["1"])
 	})
 
@@ -44,13 +45,31 @@ func TestGetPost(t *testing.T) {
 
 		got := response.Body.String()
 
+		assertStatus(t, response.Code, http.StatusOK)
 		assertGotPost(t, got, storage.posts["2"])
+	})
+
+	t.Run("returns 404 on missing posts", func(t *testing.T) {
+		request := newPostRequest("0")
+		response := httptest.NewRecorder()
+
+		server.ServeHTTP(response, request)
+
+		assertStatus(t, response.Code, http.StatusNotFound)
 	})
 }
 
 func newPostRequest(id string) *http.Request {
 	req, _ := http.NewRequest(http.MethodGet, "/posts/"+id, nil)
 	return req
+}
+
+func assertStatus(t testing.TB, got, want int) {
+	t.Helper()
+
+	if got != want {
+		t.Errorf("did not get correct status, got %d but want %d", got, want)
+	}
 }
 
 func assertGotPost(t testing.TB, got, want string) {
