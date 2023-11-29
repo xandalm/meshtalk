@@ -6,14 +6,18 @@ import (
 	"strings"
 )
 
-func GetPost(w http.ResponseWriter, r *http.Request) {
+func PostServer(w http.ResponseWriter, r *http.Request) {
 	postID := strings.TrimPrefix(r.URL.Path, "/posts/")
-	if postID == "1" {
-		fmt.Fprint(w, `{"ID": "1", "Title": "Post 1", "Content": "Post Content"}`)
-		return
+
+	fmt.Fprint(w, GetPost(postID))
+}
+
+func GetPost(id string) string {
+	if id == "1" {
+		return `{"ID": "1", "Title": "Post 1", "Content": "Post Content"}`
 	}
-	if postID == "2" {
-		fmt.Fprint(w, `{"ID": "2", "Title": "Post 2", "Content": "Post Content"}`)
-		return
+	if id == "2" {
+		return `{"ID": "2", "Title": "Post 2", "Content": "Post Content"}`
 	}
+	return ""
 }
