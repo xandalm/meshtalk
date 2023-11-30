@@ -3,6 +3,8 @@ package meshtalk
 import (
 	"net/http"
 	"net/http/httptest"
+	"strconv"
+	"strings"
 	"testing"
 )
 
@@ -12,6 +14,11 @@ type StubStorage struct {
 
 func (p *StubStorage) GetPost(id string) string {
 	return p.posts[id]
+}
+
+func (p *StubStorage) StorePost(post string) string {
+	id := len(p.posts) + 1
+	return strconv.Itoa(id)
 }
 
 func TestGetPost(t *testing.T) {
@@ -56,6 +63,29 @@ func TestGetPost(t *testing.T) {
 		server.ServeHTTP(response, request)
 
 		assertStatus(t, response.Code, http.StatusNotFound)
+	})
+}
+
+func TestStorePost(t *testing.T) {
+	storage := &StubStorage{}
+	server := &Server{storage}
+
+	t.Run("returns created on POST", func(t *testing.T) {
+		request, _ := http.NewRequest(http.MethodPost, "/posts", strings.NewReader(`{
+"Title": "Post X",
+"Content": "Post Content"}`))
+		response := httptest.NewRecorder()
+
+		server.ServeHTTP(response, request)
+
+		assertStatus(t, response.Code, http.StatusCreated)
+
+		got := response.Body.String()
+		want := "1"
+
+		if got != want {
+			t.Errorf("did not get expected id, got %q want %q", got, want)
+		}
 	})
 }
 
