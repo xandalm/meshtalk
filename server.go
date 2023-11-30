@@ -1,15 +1,15 @@
 package meshtalk
 
 import (
+	"encoding/json"
 	"fmt"
-	"io"
 	"net/http"
 	"strings"
 )
 
 type Storage interface {
-	GetPost(id string) string
-	StorePost(post string) string
+	GetPost(id string) *Post
+	StorePost(post *Post) string
 }
 
 type Server struct {
@@ -20,23 +20,34 @@ func NewServer(storage Storage) *Server {
 	return &Server{storage}
 }
 
-func (p *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
-	if r.Method == http.MethodPost {
-		post, _ := io.ReadAll(r.Body)
-		id := p.storage.StorePost(string(post))
-		w.WriteHeader(http.StatusCreated)
-		fmt.Fprint(w, id)
+	switch r.Method {
+	case http.MethodPost:
+		s.storePostHandler(w, r)
+	case http.MethodGet:
+		s.getPostHandler(w, r)
+	}
+
+}
+
+func (s *Server) storePostHandler(w http.ResponseWriter, r *http.Request) {
+	var post Post
+	json.NewDecoder(r.Body).Decode(&post)
+	id := s.storage.StorePost(&post)
+	w.WriteHeader(http.StatusCreated)
+	fmt.Fprint(w, id)
+}
+
+func (s *Server) getPostHandler(w http.ResponseWriter, r *http.Request) {
+	postID := strings.TrimPrefix(r.URL.Path, "/posts/")
+
+	foundPost := s.storage.GetPost(postID)
+
+	if foundPost == nil {
+		w.WriteHeader(http.StatusNotFound)
 		return
 	}
 
-	postID := strings.TrimPrefix(r.URL.Path, "/posts/")
-
-	foundPost := p.storage.GetPost(postID)
-
-	if foundPost == "" {
-		w.WriteHeader(http.StatusNotFound)
-	}
-
-	fmt.Fprint(w, foundPost)
+	json.NewEncoder(w).Encode(foundPost)
 }

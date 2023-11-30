@@ -1,34 +1,37 @@
-package meshtalk
+package meshtalk_test
 
 import (
+	"encoding/json"
+	"meshtalk"
 	"net/http"
 	"net/http/httptest"
+	"reflect"
 	"strconv"
 	"strings"
 	"testing"
 )
 
 type StubStorage struct {
-	posts map[string]string
+	posts map[string]*meshtalk.Post
 }
 
-func (p *StubStorage) GetPost(id string) string {
+func (p *StubStorage) GetPost(id string) *meshtalk.Post {
 	return p.posts[id]
 }
 
-func (p *StubStorage) StorePost(post string) string {
+func (p *StubStorage) StorePost(post *meshtalk.Post) string {
 	id := len(p.posts) + 1
 	return strconv.Itoa(id)
 }
 
 func TestGetPost(t *testing.T) {
 	storage := &StubStorage{
-		map[string]string{
-			"1": `{"ID": "1", "Title": "Post 1", "Content": "Post Content"}`,
-			"2": `{"ID": "2", "Title": "Post 2", "Content": "Post Content"}`,
+		map[string]*meshtalk.Post{
+			"1": meshtalk.NewPost("1", "Post 1", "Post Content"),
+			"2": meshtalk.NewPost("2", "Post 2", "Post Content"),
 		},
 	}
-	server := &Server{storage}
+	server := meshtalk.NewServer(storage)
 
 	t.Run("returns post with id equal to 1", func(t *testing.T) {
 
@@ -37,10 +40,11 @@ func TestGetPost(t *testing.T) {
 
 		server.ServeHTTP(response, request)
 
-		got := response.Body.String()
+		var got meshtalk.Post
+		json.NewDecoder(response.Body).Decode(&got)
 
 		assertStatus(t, response.Code, http.StatusOK)
-		assertGotPost(t, got, storage.posts["1"])
+		assertGotPost(t, &got, storage.posts["1"])
 	})
 
 	t.Run("returns post with id equal to 2", func(t *testing.T) {
@@ -50,10 +54,11 @@ func TestGetPost(t *testing.T) {
 
 		server.ServeHTTP(response, request)
 
-		got := response.Body.String()
+		var got meshtalk.Post
+		json.NewDecoder(response.Body).Decode(&got)
 
 		assertStatus(t, response.Code, http.StatusOK)
-		assertGotPost(t, got, storage.posts["2"])
+		assertGotPost(t, &got, storage.posts["2"])
 	})
 
 	t.Run("returns 404 on missing posts", func(t *testing.T) {
@@ -68,7 +73,7 @@ func TestGetPost(t *testing.T) {
 
 func TestStorePost(t *testing.T) {
 	storage := &StubStorage{}
-	server := &Server{storage}
+	server := meshtalk.NewServer(storage)
 
 	t.Run("returns created on POST", func(t *testing.T) {
 		request, _ := http.NewRequest(http.MethodPost, "/posts", strings.NewReader(`{
@@ -102,10 +107,10 @@ func assertStatus(t testing.TB, got, want int) {
 	}
 }
 
-func assertGotPost(t testing.TB, got, want string) {
+func assertGotPost(t testing.TB, got, want *meshtalk.Post) {
 	t.Helper()
 
-	if got != want {
+	if !reflect.DeepEqual(got, want) {
 		t.Errorf("wrong post received, got %q but want %q", got, want)
 	}
 }
