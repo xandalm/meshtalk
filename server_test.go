@@ -1,4 +1,4 @@
-package post
+package meshtalk
 
 import (
 	"net/http"
@@ -6,22 +6,22 @@ import (
 	"testing"
 )
 
-type StubPostStorage struct {
+type StubStorage struct {
 	posts map[string]string
 }
 
-func (p *StubPostStorage) GetPost(id string) string {
+func (p *StubStorage) GetPost(id string) string {
 	return p.posts[id]
 }
 
 func TestGetPost(t *testing.T) {
-	storage := &StubPostStorage{
+	storage := &StubStorage{
 		map[string]string{
 			"1": `{"ID": "1", "Title": "Post 1", "Content": "Post Content"}`,
 			"2": `{"ID": "2", "Title": "Post 2", "Content": "Post Content"}`,
 		},
 	}
-	server := &PostServer{storage}
+	server := &Server{storage}
 
 	t.Run("returns post with id equal to 1", func(t *testing.T) {
 

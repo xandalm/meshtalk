@@ -1,4 +1,4 @@
-package post
+package meshtalk
 
 import (
 	"fmt"
@@ -6,15 +6,15 @@ import (
 	"strings"
 )
 
-type PostStorage interface {
+type Storage interface {
 	GetPost(is string) string
 }
 
-type PostServer struct {
-	storage PostStorage
+type Server struct {
+	storage Storage
 }
 
-func (p *PostServer) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+func (p *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	postID := strings.TrimPrefix(r.URL.Path, "/posts/")
 
 	foundPost := p.storage.GetPost(postID)
