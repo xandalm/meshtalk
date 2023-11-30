@@ -35,7 +35,7 @@ func TestGetPost(t *testing.T) {
 
 	t.Run("returns post with id equal to 1", func(t *testing.T) {
 
-		request := newPostRequest("1")
+		request := newGetPostRequest("1")
 		response := httptest.NewRecorder()
 
 		server.ServeHTTP(response, request)
@@ -49,7 +49,7 @@ func TestGetPost(t *testing.T) {
 
 	t.Run("returns post with id equal to 2", func(t *testing.T) {
 
-		request := newPostRequest("2")
+		request := newGetPostRequest("2")
 		response := httptest.NewRecorder()
 
 		server.ServeHTTP(response, request)
@@ -62,7 +62,7 @@ func TestGetPost(t *testing.T) {
 	})
 
 	t.Run("returns 404 on missing posts", func(t *testing.T) {
-		request := newPostRequest("0")
+		request := newGetPostRequest("0")
 		response := httptest.NewRecorder()
 
 		server.ServeHTTP(response, request)
@@ -76,9 +76,9 @@ func TestStorePost(t *testing.T) {
 	server := meshtalk.NewServer(storage)
 
 	t.Run("returns created on POST", func(t *testing.T) {
-		request, _ := http.NewRequest(http.MethodPost, "/posts", strings.NewReader(`{
+		request := newStorePostRequest(`{
 "Title": "Post X",
-"Content": "Post Content"}`))
+"Content": "Post Content"}`)
 		response := httptest.NewRecorder()
 
 		server.ServeHTTP(response, request)
@@ -92,10 +92,25 @@ func TestStorePost(t *testing.T) {
 			t.Errorf("did not get expected id, got %q want %q", got, want)
 		}
 	})
+
+	t.Run("returns 400 when request with incompatible json data", func(t *testing.T) {
+
+		request := newStorePostRequest(`x`)
+		response := httptest.NewRecorder()
+
+		server.ServeHTTP(response, request)
+
+		assertStatus(t, response.Code, http.StatusBadRequest)
+	})
 }
 
-func newPostRequest(id string) *http.Request {
+func newGetPostRequest(id string) *http.Request {
 	req, _ := http.NewRequest(http.MethodGet, "/posts/"+id, nil)
+	return req
+}
+
+func newStorePostRequest(jsonRaw string) *http.Request {
+	req, _ := http.NewRequest(http.MethodPost, "/posts", strings.NewReader(jsonRaw))
 	return req
 }
 

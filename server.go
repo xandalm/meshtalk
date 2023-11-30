@@ -33,7 +33,11 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) storePostHandler(w http.ResponseWriter, r *http.Request) {
 	var post Post
-	json.NewDecoder(r.Body).Decode(&post)
+	err := json.NewDecoder(r.Body).Decode(&post)
+	if err != nil {
+		w.WriteHeader(http.StatusBadRequest)
+		return
+	}
 	id := s.storage.StorePost(&post)
 	w.WriteHeader(http.StatusCreated)
 	fmt.Fprint(w, id)
