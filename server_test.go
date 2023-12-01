@@ -12,7 +12,15 @@ import (
 )
 
 type StubStorage struct {
-	posts map[string]*meshtalk.Post
+	posts     map[string]*meshtalk.Post
+	editCalls []string
+}
+
+func NewStubStorage() *StubStorage {
+	return &StubStorage{
+		map[string]*meshtalk.Post{},
+		[]string{},
+	}
 }
 
 func (p *StubStorage) GetPost(id string) *meshtalk.Post {
@@ -24,9 +32,14 @@ func (p *StubStorage) StorePost(post *meshtalk.Post) string {
 	return strconv.Itoa(id)
 }
 
+func (p *StubStorage) EditPost(post *meshtalk.Post) bool {
+	p.editCalls = append(p.editCalls, post.Id)
+	return true
+}
+
 func TestGetPost(t *testing.T) {
 	storage := &StubStorage{
-		map[string]*meshtalk.Post{
+		posts: map[string]*meshtalk.Post{
 			"1": meshtalk.NewPost("1", "Post 1", "Post Content"),
 			"2": meshtalk.NewPost("2", "Post 2", "Post Content"),
 		},
@@ -43,7 +56,7 @@ func TestGetPost(t *testing.T) {
 		var got meshtalk.Post
 		json.NewDecoder(response.Body).Decode(&got)
 
-		assertStatus(t, response.Code, http.StatusOK)
+		assertStatus(t, response, http.StatusOK)
 		assertGotPost(t, &got, storage.posts["1"])
 	})
 
@@ -57,7 +70,7 @@ func TestGetPost(t *testing.T) {
 		var got meshtalk.Post
 		json.NewDecoder(response.Body).Decode(&got)
 
-		assertStatus(t, response.Code, http.StatusOK)
+		assertStatus(t, response, http.StatusOK)
 		assertGotPost(t, &got, storage.posts["2"])
 	})
 
@@ -67,7 +80,7 @@ func TestGetPost(t *testing.T) {
 
 		server.ServeHTTP(response, request)
 
-		assertStatus(t, response.Code, http.StatusNotFound)
+		assertStatus(t, response, http.StatusNotFound)
 	})
 }
 
@@ -83,7 +96,7 @@ func TestStorePost(t *testing.T) {
 
 		server.ServeHTTP(response, request)
 
-		assertStatus(t, response.Code, http.StatusCreated)
+		assertStatus(t, response, http.StatusCreated)
 
 		got := response.Body.String()
 		want := "1"
@@ -100,8 +113,35 @@ func TestStorePost(t *testing.T) {
 
 		server.ServeHTTP(response, request)
 
-		assertStatus(t, response.Code, http.StatusBadRequest)
+		assertStatus(t, response, http.StatusBadRequest)
 	})
+}
+
+func TestEditPost(t *testing.T) {
+	storage := &StubStorage{
+		posts: map[string]*meshtalk.Post{
+			"1": meshtalk.NewPost("1", "Post 1", "Post Content"),
+			"2": meshtalk.NewPost("2", "Post 2", "Post Content"),
+		},
+	}
+	server := meshtalk.NewServer(storage)
+
+	t.Run("returns 204 on post edited", func(t *testing.T) {
+		jsonRaw := `{
+"Title":"Post 1",
+"Content": "Edited Content"}`
+		request, _ := http.NewRequest(http.MethodPut, "/posts/1", strings.NewReader(jsonRaw))
+		response := httptest.NewRecorder()
+
+		server.ServeHTTP(response, request)
+
+		assertStatus(t, response, http.StatusNoContent)
+
+		if len(storage.editCalls) != 1 {
+			t.Error("did not edited the post")
+		}
+	})
+
 }
 
 func newGetPostRequest(id string) *http.Request {
@@ -114,11 +154,11 @@ func newStorePostRequest(jsonRaw string) *http.Request {
 	return req
 }
 
-func assertStatus(t testing.TB, got, want int) {
+func assertStatus(t testing.TB, response *httptest.ResponseRecorder, want int) {
 	t.Helper()
 
-	if got != want {
-		t.Errorf("did not get correct status, got %d but want %d", got, want)
+	if response.Code != want {
+		t.Errorf("did not get correct status, got %d but want %d", response.Code, want)
 	}
 }
 

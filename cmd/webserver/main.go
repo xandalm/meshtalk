@@ -31,6 +31,16 @@ func (s *InMemoryStorage) StorePost(post *meshtalk.Post) string {
 	return post.Id
 }
 
+func (s *InMemoryStorage) EditPost(post *meshtalk.Post) bool {
+	found := s.GetPost(post.Id)
+	if found == nil {
+		return false
+	}
+	found.Title = post.Title
+	found.Content = post.Content
+	return true
+}
+
 func main() {
 	storage := NewInMemoryStorage()
 	server := meshtalk.NewServer(storage)

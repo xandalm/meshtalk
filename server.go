@@ -10,6 +10,7 @@ import (
 type Storage interface {
 	GetPost(id string) *Post
 	StorePost(post *Post) string
+	EditPost(post *Post) bool
 }
 
 type Server struct {
@@ -27,6 +28,10 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		s.storePostHandler(w, r)
 	case http.MethodGet:
 		s.getPostHandler(w, r)
+	case http.MethodPut:
+		s.editPostHandler(w, r)
+	default:
+		w.WriteHeader(http.StatusNotImplemented)
 	}
 
 }
@@ -44,7 +49,7 @@ func (s *Server) storePostHandler(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) getPostHandler(w http.ResponseWriter, r *http.Request) {
-	postID := strings.TrimPrefix(r.URL.Path, "/posts/")
+	postID := s.extractPostIdFromURLPath(r)
 
 	foundPost := s.storage.GetPost(postID)
 
@@ -54,4 +59,20 @@ func (s *Server) getPostHandler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	json.NewEncoder(w).Encode(foundPost)
+}
+
+func (s *Server) editPostHandler(w http.ResponseWriter, r *http.Request) {
+	postID := s.extractPostIdFromURLPath(r)
+
+	var post Post
+	json.NewDecoder(r.Body).Decode(&post)
+	post.Id = postID
+
+	if s.storage.EditPost(&post) {
+		w.WriteHeader(http.StatusNoContent)
+	}
+}
+
+func (s *Server) extractPostIdFromURLPath(r *http.Request) string {
+	return strings.TrimPrefix(r.URL.Path, "/posts/")
 }
