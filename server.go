@@ -68,9 +68,18 @@ func (s *Server) editPostHandler(w http.ResponseWriter, r *http.Request) {
 	json.NewDecoder(r.Body).Decode(&post)
 	post.Id = postID
 
+	foundPost := s.storage.GetPost(postID)
+	if foundPost == nil {
+		w.WriteHeader(http.StatusNotFound)
+		return
+	}
+
 	if s.storage.EditPost(&post) {
 		w.WriteHeader(http.StatusNoContent)
+		return
 	}
+
+	w.WriteHeader(http.StatusInternalServerError)
 }
 
 func (s *Server) extractPostIdFromURLPath(r *http.Request) string {

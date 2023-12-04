@@ -37,6 +37,22 @@ func (p *StubStorage) EditPost(post *meshtalk.Post) bool {
 	return true
 }
 
+type StubFailingStorage struct {
+	posts map[string]*meshtalk.Post
+}
+
+func (p *StubFailingStorage) GetPost(id string) *meshtalk.Post {
+	return p.posts[id]
+}
+
+func (p *StubFailingStorage) StorePost(post *meshtalk.Post) string {
+	return ""
+}
+
+func (p *StubFailingStorage) EditPost(post *meshtalk.Post) bool {
+	return false
+}
+
 func TestGetPost(t *testing.T) {
 	storage := &StubStorage{
 		posts: map[string]*meshtalk.Post{
@@ -141,7 +157,34 @@ func TestEditPost(t *testing.T) {
 			t.Error("did not edited the post")
 		}
 	})
+	t.Run("returns 404 on missing post when edit", func(t *testing.T) {
+		jsonRaw := `{
+"Title":"Post 3",
+"Content": "Edited Content"}`
+		request, _ := http.NewRequest(http.MethodPut, "/posts/3", strings.NewReader(jsonRaw))
+		response := httptest.NewRecorder()
 
+		server.ServeHTTP(response, request)
+
+		assertStatus(t, response, http.StatusNotFound)
+	})
+	t.Run("returns 500 on fail edit", func(t *testing.T) {
+		storage := &StubFailingStorage{
+			posts: map[string]*meshtalk.Post{
+				"1": meshtalk.NewPost("1", "Post 1", "Post Content"),
+			},
+		}
+		server := meshtalk.NewServer(storage)
+		jsonRaw := `{
+"Title":"Post 1",
+"Content": "Edited Content"}`
+		request, _ := http.NewRequest(http.MethodPut, "/posts/1", strings.NewReader(jsonRaw))
+		response := httptest.NewRecorder()
+
+		server.ServeHTTP(response, request)
+
+		assertStatus(t, response, http.StatusInternalServerError)
+	})
 }
 
 func newGetPostRequest(id string) *http.Request {
