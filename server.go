@@ -3,6 +3,7 @@ package meshtalk
 import (
 	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
 	"strings"
 )
@@ -41,7 +42,7 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) storePostHandler(w http.ResponseWriter, r *http.Request) {
 	var post Post
-	err := json.NewDecoder(r.Body).Decode(&post)
+	err := fromJSON(r.Body, &post)
 	if err != nil {
 		w.WriteHeader(http.StatusBadRequest)
 		return
@@ -61,14 +62,14 @@ func (s *Server) getPostHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	json.NewEncoder(w).Encode(foundPost)
+	toJSON(w, foundPost)
 }
 
 func (s *Server) editPostHandler(w http.ResponseWriter, r *http.Request) {
 	postID := s.extractPostIdFromURLPath(r)
 
 	var post Post
-	json.NewDecoder(r.Body).Decode(&post)
+	fromJSON(r.Body, &post)
 	post.Id = postID
 
 	foundPost := s.storage.GetPost(postID)
@@ -96,4 +97,12 @@ func (s *Server) deletePostHandler(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) extractPostIdFromURLPath(r *http.Request) string {
 	return strings.TrimPrefix(r.URL.Path, "/posts/")
+}
+
+func toJSON(w io.Writer, s any) error {
+	return json.NewEncoder(w).Encode(s)
+}
+
+func fromJSON(r io.Reader, s any) error {
+	return json.NewDecoder(r).Decode(s)
 }

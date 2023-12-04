@@ -65,8 +65,8 @@ func (s *StubFailingStorage) DeletePost(id string) bool {
 func TestGetPost(t *testing.T) {
 	storage := &StubStorage{
 		posts: map[string]*meshtalk.Post{
-			"1": meshtalk.NewPost("1", "Post 1", "Post Content"),
-			"2": meshtalk.NewPost("2", "Post 2", "Post Content"),
+			"1": meshtalk.NewPost("1", "Post 1", "Post Content", "Alex"),
+			"2": meshtalk.NewPost("2", "Post 2", "Post Content", "Andre"),
 		},
 	}
 	server := meshtalk.NewServer(storage)
@@ -145,16 +145,14 @@ func TestStorePost(t *testing.T) {
 func TestEditPost(t *testing.T) {
 	storage := &StubStorage{
 		posts: map[string]*meshtalk.Post{
-			"1": meshtalk.NewPost("1", "Post 1", "Post Content"),
-			"2": meshtalk.NewPost("2", "Post 2", "Post Content"),
+			"1": meshtalk.NewPost("1", "Post 1", "Post Content", "Alex"),
+			"2": meshtalk.NewPost("2", "Post 2", "Post Content", "Andre"),
 		},
 	}
 	server := meshtalk.NewServer(storage)
 
 	t.Run("returns 204 on post edited", func(t *testing.T) {
-		jsonRaw := `{
-"Title":"Post 1",
-"Content": "Edited Content"}`
+		jsonRaw := `{"Content": "Edited Content"}`
 		request := newEditPostRequest("1", jsonRaw)
 		response := httptest.NewRecorder()
 
@@ -167,9 +165,7 @@ func TestEditPost(t *testing.T) {
 		}
 	})
 	t.Run("returns 404 on missing post when edit", func(t *testing.T) {
-		jsonRaw := `{
-"Title":"Post 3",
-"Content": "Edited Content"}`
+		jsonRaw := `{"Content": "Edited Content"}`
 		request := newEditPostRequest("3", jsonRaw)
 		response := httptest.NewRecorder()
 
@@ -180,13 +176,11 @@ func TestEditPost(t *testing.T) {
 	t.Run("returns 500 on fail edit", func(t *testing.T) {
 		storage := &StubFailingStorage{
 			posts: map[string]*meshtalk.Post{
-				"1": meshtalk.NewPost("1", "Post 1", "Post Content"),
+				"1": meshtalk.NewPost("1", "Post 1", "Post Content", "Alex"),
 			},
 		}
 		server := meshtalk.NewServer(storage)
-		jsonRaw := `{
-"Title":"Post 1",
-"Content": "Edited Content"}`
+		jsonRaw := `{"Content": "Edited Content"}`
 		request := newEditPostRequest("1", jsonRaw)
 		response := httptest.NewRecorder()
 
@@ -200,8 +194,8 @@ func TestDeletePost(t *testing.T) {
 	t.Run("returns 200 on post deleted", func(t *testing.T) {
 		storage := &StubStorage{
 			posts: map[string]*meshtalk.Post{
-				"1": meshtalk.NewPost("1", "Post 1", "Post Content"),
-				"2": meshtalk.NewPost("2", "Post 2", "Post Content"),
+				"1": meshtalk.NewPost("1", "Post 1", "Post Content", "Alex"),
+				"2": meshtalk.NewPost("2", "Post 2", "Post Content", "Andre"),
 			},
 		}
 		server := meshtalk.NewServer(storage)
