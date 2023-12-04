@@ -11,6 +11,7 @@ type Storage interface {
 	GetPost(id string) *Post
 	StorePost(post *Post) string
 	EditPost(post *Post) bool
+	DeletePost(id string) bool
 }
 
 type Server struct {
@@ -30,6 +31,8 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		s.getPostHandler(w, r)
 	case http.MethodPut:
 		s.editPostHandler(w, r)
+	case http.MethodDelete:
+		s.deletePostHandler(w, r)
 	default:
 		w.WriteHeader(http.StatusNotImplemented)
 	}
@@ -79,6 +82,15 @@ func (s *Server) editPostHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	w.WriteHeader(http.StatusInternalServerError)
+}
+
+func (s *Server) deletePostHandler(w http.ResponseWriter, r *http.Request) {
+	postID := s.extractPostIdFromURLPath(r)
+	if s.storage.DeletePost(postID) {
+		w.WriteHeader(http.StatusOK)
+		return
+	}
 	w.WriteHeader(http.StatusInternalServerError)
 }
 

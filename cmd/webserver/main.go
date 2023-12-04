@@ -41,6 +41,11 @@ func (s *InMemoryStorage) EditPost(post *meshtalk.Post) bool {
 	return true
 }
 
+func (s *InMemoryStorage) DeletePost(id string) bool {
+	delete(s.posts, id)
+	return true
+}
+
 func main() {
 	storage := NewInMemoryStorage()
 	server := meshtalk.NewServer(storage)

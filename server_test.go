@@ -23,17 +23,22 @@ func NewStubStorage() *StubStorage {
 	}
 }
 
-func (p *StubStorage) GetPost(id string) *meshtalk.Post {
-	return p.posts[id]
+func (s *StubStorage) GetPost(id string) *meshtalk.Post {
+	return s.posts[id]
 }
 
-func (p *StubStorage) StorePost(post *meshtalk.Post) string {
-	id := len(p.posts) + 1
+func (s *StubStorage) StorePost(post *meshtalk.Post) string {
+	id := len(s.posts) + 1
 	return strconv.Itoa(id)
 }
 
-func (p *StubStorage) EditPost(post *meshtalk.Post) bool {
-	p.editCalls = append(p.editCalls, post.Id)
+func (s *StubStorage) EditPost(post *meshtalk.Post) bool {
+	s.editCalls = append(s.editCalls, post.Id)
+	return true
+}
+
+func (s *StubStorage) DeletePost(id string) bool {
+	delete(s.posts, id)
 	return true
 }
 
@@ -41,15 +46,19 @@ type StubFailingStorage struct {
 	posts map[string]*meshtalk.Post
 }
 
-func (p *StubFailingStorage) GetPost(id string) *meshtalk.Post {
-	return p.posts[id]
+func (s *StubFailingStorage) GetPost(id string) *meshtalk.Post {
+	return s.posts[id]
 }
 
-func (p *StubFailingStorage) StorePost(post *meshtalk.Post) string {
+func (s *StubFailingStorage) StorePost(post *meshtalk.Post) string {
 	return ""
 }
 
-func (p *StubFailingStorage) EditPost(post *meshtalk.Post) bool {
+func (s *StubFailingStorage) EditPost(post *meshtalk.Post) bool {
+	return false
+}
+
+func (s *StubFailingStorage) DeletePost(id string) bool {
 	return false
 }
 
@@ -146,7 +155,7 @@ func TestEditPost(t *testing.T) {
 		jsonRaw := `{
 "Title":"Post 1",
 "Content": "Edited Content"}`
-		request, _ := http.NewRequest(http.MethodPut, "/posts/1", strings.NewReader(jsonRaw))
+		request := newEditPostRequest("1", jsonRaw)
 		response := httptest.NewRecorder()
 
 		server.ServeHTTP(response, request)
@@ -161,7 +170,7 @@ func TestEditPost(t *testing.T) {
 		jsonRaw := `{
 "Title":"Post 3",
 "Content": "Edited Content"}`
-		request, _ := http.NewRequest(http.MethodPut, "/posts/3", strings.NewReader(jsonRaw))
+		request := newEditPostRequest("3", jsonRaw)
 		response := httptest.NewRecorder()
 
 		server.ServeHTTP(response, request)
@@ -178,7 +187,39 @@ func TestEditPost(t *testing.T) {
 		jsonRaw := `{
 "Title":"Post 1",
 "Content": "Edited Content"}`
-		request, _ := http.NewRequest(http.MethodPut, "/posts/1", strings.NewReader(jsonRaw))
+		request := newEditPostRequest("1", jsonRaw)
+		response := httptest.NewRecorder()
+
+		server.ServeHTTP(response, request)
+
+		assertStatus(t, response, http.StatusInternalServerError)
+	})
+}
+
+func TestDeletePost(t *testing.T) {
+	t.Run("returns 200 on post deleted", func(t *testing.T) {
+		storage := &StubStorage{
+			posts: map[string]*meshtalk.Post{
+				"1": meshtalk.NewPost("1", "Post 1", "Post Content"),
+				"2": meshtalk.NewPost("2", "Post 2", "Post Content"),
+			},
+		}
+		server := meshtalk.NewServer(storage)
+		request := newDeletePostRequest("2")
+		response := httptest.NewRecorder()
+
+		server.ServeHTTP(response, request)
+
+		assertStatus(t, response, http.StatusOK)
+		if len(storage.posts) != 1 {
+			t.Errorf("expected that the post was deleted, but it was not")
+		}
+	})
+	t.Run("returns 500 on fail delete", func(t *testing.T) {
+		storage := &StubFailingStorage{}
+		server := meshtalk.NewServer(storage)
+
+		request := newDeletePostRequest("1")
 		response := httptest.NewRecorder()
 
 		server.ServeHTTP(response, request)
@@ -194,6 +235,16 @@ func newGetPostRequest(id string) *http.Request {
 
 func newStorePostRequest(jsonRaw string) *http.Request {
 	req, _ := http.NewRequest(http.MethodPost, "/posts", strings.NewReader(jsonRaw))
+	return req
+}
+
+func newEditPostRequest(id, jsonRaw string) *http.Request {
+	req, _ := http.NewRequest(http.MethodPut, "/posts/"+id, strings.NewReader(jsonRaw))
+	return req
+}
+
+func newDeletePostRequest(id string) *http.Request {
+	req, _ := http.NewRequest(http.MethodDelete, "/posts/"+id, nil)
 	return req
 }
 
