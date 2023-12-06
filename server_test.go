@@ -1,7 +1,6 @@
 package meshtalk_test
 
 import (
-	"encoding/json"
 	"meshtalk"
 	"net/http"
 	"net/http/httptest"
@@ -9,6 +8,7 @@ import (
 	"strconv"
 	"strings"
 	"testing"
+	"time"
 )
 
 type StubStorage struct {
@@ -65,8 +65,20 @@ func (s *StubFailingStorage) DeletePost(id string) bool {
 func TestGetPost(t *testing.T) {
 	storage := &StubStorage{
 		posts: map[string]*meshtalk.Post{
-			"1": meshtalk.NewPost("1", "Post 1", "Post Content", "Alex"),
-			"2": meshtalk.NewPost("2", "Post 2", "Post Content", "Andre"),
+			"1": {
+				Id:        "1",
+				Title:     "Post 1",
+				Content:   "Post Content",
+				Author:    "Alex",
+				CreatedAt: newDate(2023, time.December, 4, 16, 30, 0, 0),
+			},
+			"2": {
+				Id:        "2",
+				Title:     "Post 2",
+				Content:   "Post Content",
+				Author:    "Andre",
+				CreatedAt: newDate(2023, time.December, 4, 17, 0, 0, 0),
+			},
 		},
 	}
 	server := meshtalk.NewServer(storage)
@@ -78,11 +90,14 @@ func TestGetPost(t *testing.T) {
 
 		server.ServeHTTP(response, request)
 
-		var got meshtalk.Post
-		json.NewDecoder(response.Body).Decode(&got)
+		got := response.Body.String()
+		want := `{"data":{"id":"1","title":"Post 1","content":"Post Content","author":"Alex","createdAt":"2023-12-04T16:30:00.000Z"}}`
 
 		assertStatus(t, response, http.StatusOK)
-		assertGotPost(t, &got, storage.posts["1"])
+
+		if got != want {
+			t.Errorf("got %q, \nbut want %q", got, want)
+		}
 	})
 
 	t.Run("returns post with id equal to 2", func(t *testing.T) {
@@ -92,11 +107,14 @@ func TestGetPost(t *testing.T) {
 
 		server.ServeHTTP(response, request)
 
-		var got meshtalk.Post
-		json.NewDecoder(response.Body).Decode(&got)
+		got := response.Body.String()
+		want := `{"data":{"id":"2","title":"Post 2","content":"Post Content","author":"Andre","createdAt":"2023-12-04T17:00:00.000Z"}}`
 
 		assertStatus(t, response, http.StatusOK)
-		assertGotPost(t, &got, storage.posts["2"])
+
+		if got != want {
+			t.Errorf("got %q, but want %q", got, want)
+		}
 	})
 
 	t.Run("returns 404 on missing posts", func(t *testing.T) {
@@ -220,6 +238,11 @@ func TestDeletePost(t *testing.T) {
 
 		assertStatus(t, response, http.StatusInternalServerError)
 	})
+}
+
+func newDate(year int, month time.Month, day, hour, min, sec, mlsec int) *time.Time {
+	datetime := time.Date(year, month, day, hour, min, sec, mlsec*1e6, time.UTC)
+	return &datetime
 }
 
 func newGetPostRequest(id string) *http.Request {
