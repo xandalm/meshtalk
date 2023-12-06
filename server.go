@@ -15,6 +15,11 @@ type Storage interface {
 	DeletePost(id string) bool
 }
 
+type ResponseModel struct {
+	Data  any   `json:"data"`
+	Error error `json:"error,omitempty"`
+}
+
 type Server struct {
 	storage Storage
 }
@@ -62,25 +67,9 @@ func (s *Server) getPostHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	createdAt := foundPost.CreatedAt
-	fmt.Fprintf(
-		w,
-		`{"data":{"id":"%s","title":"%s","content":"%s","author":"%s","createdAt":"%s"}}`,
-		foundPost.Id,
-		foundPost.Title,
-		foundPost.Content,
-		foundPost.Author,
-		fmt.Sprintf(
-			"%d-%02d-%02dT%02d:%02d:%02d.%03dZ",
-			createdAt.Year(),
-			createdAt.Month(),
-			createdAt.Day(),
-			createdAt.Hour(),
-			createdAt.Minute(),
-			createdAt.Second(),
-			createdAt.Nanosecond()/1e6,
-		),
-	)
+	// data, _ := json.Marshal(foundPost)
+
+	toJSON(w, ResponseModel{Data: *foundPost})
 }
 
 func (s *Server) editPostHandler(w http.ResponseWriter, r *http.Request) {

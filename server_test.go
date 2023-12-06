@@ -1,6 +1,9 @@
 package meshtalk_test
 
 import (
+	"bytes"
+	"encoding/json"
+	"io"
 	"meshtalk"
 	"net/http"
 	"net/http/httptest"
@@ -28,8 +31,9 @@ func (s *StubStorage) GetPost(id string) *meshtalk.Post {
 }
 
 func (s *StubStorage) StorePost(post *meshtalk.Post) string {
-	id := len(s.posts) + 1
-	return strconv.Itoa(id)
+	id := strconv.Itoa(len(s.posts) + 1)
+	s.posts[id] = post
+	return id
 }
 
 func (s *StubStorage) EditPost(post *meshtalk.Post) bool {
@@ -70,7 +74,7 @@ func TestGetPost(t *testing.T) {
 				Title:     "Post 1",
 				Content:   "Post Content",
 				Author:    "Alex",
-				CreatedAt: newDate(2023, time.December, 4, 16, 30, 0, 0),
+				CreatedAt: newDate(2023, time.December, 4, 16, 30, 30, 100),
 			},
 			"2": {
 				Id:        "2",
@@ -90,14 +94,12 @@ func TestGetPost(t *testing.T) {
 
 		server.ServeHTTP(response, request)
 
-		got := response.Body.String()
-		want := `{"data":{"id":"1","title":"Post 1","content":"Post Content","author":"Alex","createdAt":"2023-12-04T16:30:00.000Z"}}`
-
 		assertStatus(t, response, http.StatusOK)
 
-		if got != want {
-			t.Errorf("got %q, \nbut want %q", got, want)
-		}
+		got := getPostFromResponseModel(t, response.Body)
+		want := *storage.posts["1"]
+
+		assertGotPost(t, got, want)
 	})
 
 	t.Run("returns post with id equal to 2", func(t *testing.T) {
@@ -107,14 +109,12 @@ func TestGetPost(t *testing.T) {
 
 		server.ServeHTTP(response, request)
 
-		got := response.Body.String()
-		want := `{"data":{"id":"2","title":"Post 2","content":"Post Content","author":"Andre","createdAt":"2023-12-04T17:00:00.000Z"}}`
-
 		assertStatus(t, response, http.StatusOK)
 
-		if got != want {
-			t.Errorf("got %q, but want %q", got, want)
-		}
+		got := getPostFromResponseModel(t, response.Body)
+		want := *storage.posts["2"]
+
+		assertGotPost(t, got, want)
 	})
 
 	t.Run("returns 404 on missing posts", func(t *testing.T) {
@@ -128,7 +128,7 @@ func TestGetPost(t *testing.T) {
 }
 
 func TestStorePost(t *testing.T) {
-	storage := &StubStorage{}
+	storage := NewStubStorage()
 	server := meshtalk.NewServer(storage)
 
 	t.Run("returns created on POST", func(t *testing.T) {
@@ -146,6 +146,10 @@ func TestStorePost(t *testing.T) {
 
 		if got != want {
 			t.Errorf("did not get expected id, got %q want %q", got, want)
+		}
+
+		if len(storage.posts) != 1 {
+			t.Errorf("expected posts list size to be %d, but got  %d", 1, len(storage.posts))
 		}
 	})
 
@@ -213,17 +217,16 @@ func TestDeletePost(t *testing.T) {
 		storage := &StubStorage{
 			posts: map[string]*meshtalk.Post{
 				"1": meshtalk.NewPost("1", "Post 1", "Post Content", "Alex"),
-				"2": meshtalk.NewPost("2", "Post 2", "Post Content", "Andre"),
 			},
 		}
 		server := meshtalk.NewServer(storage)
-		request := newDeletePostRequest("2")
+		request := newDeletePostRequest("1")
 		response := httptest.NewRecorder()
 
 		server.ServeHTTP(response, request)
 
 		assertStatus(t, response, http.StatusOK)
-		if len(storage.posts) != 1 {
+		if len(storage.posts) != 0 {
 			t.Errorf("expected that the post was deleted, but it was not")
 		}
 	})
@@ -273,10 +276,37 @@ func assertStatus(t testing.TB, response *httptest.ResponseRecorder, want int) {
 	}
 }
 
-func assertGotPost(t testing.TB, got, want *meshtalk.Post) {
+func assertGotPost(t testing.TB, got, want meshtalk.Post) {
 	t.Helper()
 
 	if !reflect.DeepEqual(got, want) {
 		t.Errorf("wrong post received, got %q but want %q", got, want)
 	}
+}
+
+func getResponseModelFromResponse(t *testing.T, body io.Reader) meshtalk.ResponseModel {
+	t.Helper()
+
+	var responseModel meshtalk.ResponseModel
+	err := json.NewDecoder(body).Decode(&responseModel)
+	if err != nil {
+		t.Fatalf("unable to parse response from server into ResponseModel, %v", err)
+	}
+
+	return responseModel
+}
+
+func getPostFromResponseModel(t *testing.T, body io.Reader) meshtalk.Post {
+	t.Helper()
+
+	responseModel := getResponseModelFromResponse(t, body)
+
+	var post meshtalk.Post
+	data, _ := json.Marshal(responseModel.Data)
+
+	if err := json.NewDecoder(bytes.NewReader(data)).Decode(&post); err != nil {
+		t.Fatalf("unable to parse data from ResponseModel into Post, %v", err)
+	}
+
+	return post
 }
