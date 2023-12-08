@@ -2,7 +2,6 @@ package meshtalk
 
 import (
 	"encoding/json"
-	"fmt"
 	"io"
 	"net/http"
 	"strings"
@@ -10,9 +9,9 @@ import (
 
 type Storage interface {
 	GetPost(id string) *Post
-	StorePost(post *Post) string
-	EditPost(post *Post) bool
-	DeletePost(id string) bool
+	StorePost(post *Post) error
+	EditPost(post *Post) error
+	DeletePost(id string) error
 }
 
 type Error struct {
@@ -25,7 +24,8 @@ type ResponseModel struct {
 }
 
 var (
-	ErrPostNotFound = Error{"there is no such post here"}
+	ErrPostNotFound         = Error{"there is no such post here"}
+	ErrNotSupportedPostData = Error{"unsupported data to parse into post"}
 )
 
 type Server struct {
@@ -58,11 +58,19 @@ func (s *Server) storePostHandler(w http.ResponseWriter, r *http.Request) {
 	err := fromJSON(r.Body, &post)
 	if err != nil {
 		w.WriteHeader(http.StatusBadRequest)
+		s.writeResponseModel(w, nil, ErrNotSupportedPostData)
 		return
 	}
-	id := s.storage.StorePost(&post)
+	if err := s.storage.StorePost(&post); err != nil {
+		w.WriteHeader(http.StatusInternalServerError)
+		return
+	}
 	w.WriteHeader(http.StatusCreated)
-	fmt.Fprint(w, id)
+	s.writeResponseModel(
+		w,
+		post,
+		nil,
+	)
 }
 
 func (s *Server) writeResponseModel(w http.ResponseWriter, data any, err any) {
@@ -102,21 +110,21 @@ func (s *Server) editPostHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if s.storage.EditPost(&post) {
-		w.WriteHeader(http.StatusNoContent)
+	if err := s.storage.EditPost(&post); err != nil {
+		w.WriteHeader(http.StatusInternalServerError)
 		return
 	}
 
-	w.WriteHeader(http.StatusInternalServerError)
+	w.WriteHeader(http.StatusNoContent)
 }
 
 func (s *Server) deletePostHandler(w http.ResponseWriter, r *http.Request) {
 	postID := s.extractPostIdFromURLPath(r)
-	if s.storage.DeletePost(postID) {
-		w.WriteHeader(http.StatusOK)
+	if err := s.storage.DeletePost(postID); err != nil {
+		w.WriteHeader(http.StatusInternalServerError)
 		return
 	}
-	w.WriteHeader(http.StatusInternalServerError)
+	w.WriteHeader(http.StatusOK)
 }
 
 func (s *Server) extractPostIdFromURLPath(r *http.Request) string {
