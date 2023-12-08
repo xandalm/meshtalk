@@ -15,10 +15,18 @@ type Storage interface {
 	DeletePost(id string) bool
 }
 
-type ResponseModel struct {
-	Data  any   `json:"data"`
-	Error error `json:"error,omitempty"`
+type Error struct {
+	Message string `json:"message,omitempty"`
 }
+
+type ResponseModel struct {
+	Data  any `json:"data,omitempty"`
+	Error any `json:"error,omitempty"`
+}
+
+var (
+	ErrPostNotFound = Error{"there is no such post here"}
+)
 
 type Server struct {
 	storage Storage
@@ -57,6 +65,16 @@ func (s *Server) storePostHandler(w http.ResponseWriter, r *http.Request) {
 	fmt.Fprint(w, id)
 }
 
+func (s *Server) writeResponseModel(w http.ResponseWriter, data any, err any) {
+	toJSON(
+		w,
+		ResponseModel{
+			Data:  data,
+			Error: err,
+		},
+	)
+}
+
 func (s *Server) getPostHandler(w http.ResponseWriter, r *http.Request) {
 	postID := s.extractPostIdFromURLPath(r)
 
@@ -64,12 +82,10 @@ func (s *Server) getPostHandler(w http.ResponseWriter, r *http.Request) {
 
 	if foundPost == nil {
 		w.WriteHeader(http.StatusNotFound)
+		s.writeResponseModel(w, nil, ErrPostNotFound)
 		return
 	}
-
-	// data, _ := json.Marshal(foundPost)
-
-	toJSON(w, ResponseModel{Data: *foundPost})
+	s.writeResponseModel(w, *foundPost, nil)
 }
 
 func (s *Server) editPostHandler(w http.ResponseWriter, r *http.Request) {
@@ -82,6 +98,7 @@ func (s *Server) editPostHandler(w http.ResponseWriter, r *http.Request) {
 	foundPost := s.storage.GetPost(postID)
 	if foundPost == nil {
 		w.WriteHeader(http.StatusNotFound)
+		s.writeResponseModel(w, nil, ErrPostNotFound)
 		return
 	}
 

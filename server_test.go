@@ -124,6 +124,11 @@ func TestGetPost(t *testing.T) {
 		server.ServeHTTP(response, request)
 
 		assertStatus(t, response, http.StatusNotFound)
+
+		got := getErrorFromResponseModel(t, response.Body)
+		want := meshtalk.ErrPostNotFound
+
+		assertGotError(t, got, want)
 	})
 }
 
@@ -194,6 +199,11 @@ func TestEditPost(t *testing.T) {
 		server.ServeHTTP(response, request)
 
 		assertStatus(t, response, http.StatusNotFound)
+
+		got := getErrorFromResponseModel(t, response.Body)
+		want := meshtalk.ErrPostNotFound
+
+		assertGotError(t, got, want)
 	})
 	t.Run("returns 500 on fail edit", func(t *testing.T) {
 		storage := &StubFailingStorage{
@@ -284,6 +294,14 @@ func assertGotPost(t testing.TB, got, want meshtalk.Post) {
 	}
 }
 
+func assertGotError(t testing.TB, got, want meshtalk.Error) {
+	t.Helper()
+
+	if !reflect.DeepEqual(got, want) {
+		t.Errorf("got error %q, but want %q", got, want)
+	}
+}
+
 func getResponseModelFromResponse(t *testing.T, body io.Reader) meshtalk.ResponseModel {
 	t.Helper()
 
@@ -309,4 +327,19 @@ func getPostFromResponseModel(t *testing.T, body io.Reader) meshtalk.Post {
 	}
 
 	return post
+}
+
+func getErrorFromResponseModel(t *testing.T, body io.Reader) meshtalk.Error {
+	t.Helper()
+
+	responseModel := getResponseModelFromResponse(t, body)
+
+	var responseError meshtalk.Error
+	data, _ := json.Marshal(responseModel.Error)
+
+	if err := json.NewDecoder(bytes.NewReader(data)).Decode(&responseError); err != nil {
+		t.Fatalf("unable to parse error from ResponseModel into Error, %v", err)
+	}
+
+	return responseError
 }
