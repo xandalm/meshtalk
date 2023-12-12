@@ -33,6 +33,16 @@ func (s *InMemoryStorage) GetPost(id string) *Post {
 	}
 }
 
+func (s *InMemoryStorage) GetPosts() []Post {
+	posts := make([]Post, 0, len(s.posts))
+
+	for _, p := range s.posts {
+		posts = append(posts, p)
+	}
+
+	return posts
+}
+
 func (s *InMemoryStorage) StorePost(post *Post) error {
 	post.Id = strconv.Itoa(s.posts_pk)
 	createdAt := time.Now()

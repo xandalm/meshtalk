@@ -43,6 +43,14 @@ func (s *StubStorage) GetPost(id string) *meshtalk.Post {
 	}
 }
 
+func (s *StubStorage) GetPosts() []meshtalk.Post {
+	posts := make([]meshtalk.Post, 0, len(s.posts))
+	for _, post := range s.posts {
+		posts = append(posts, post)
+	}
+	return posts
+}
+
 func (s *StubStorage) StorePost(post *meshtalk.Post) error {
 	post.Id = strconv.Itoa(len(s.posts) + 1)
 	createdAt := time.Now()
@@ -70,6 +78,10 @@ type StubFailingStorage struct {
 }
 
 func (s *StubFailingStorage) GetPost(id string) *meshtalk.Post {
+	return nil
+}
+
+func (s *StubFailingStorage) GetPosts() []meshtalk.Post {
 	return nil
 }
 
@@ -150,6 +162,33 @@ func TestGetPost(t *testing.T) {
 		}
 
 		assertGotError(t, got, want)
+	})
+
+	t.Run("returns all posts", func(t *testing.T) {
+		request, _ := http.NewRequest(http.MethodGet, "/posts/", nil)
+		response := httptest.NewRecorder()
+
+		server.ServeHTTP(response, request)
+
+		assertStatus(t, response, http.StatusOK)
+
+		responseModel := getResponseModelFromResponse(t, response.Body)
+
+		var got []meshtalk.Post
+		data, _ := json.Marshal(responseModel.Data)
+
+		if err := json.NewDecoder(bytes.NewReader(data)).Decode(&got); err != nil {
+			t.Fatalf("unable to parse data into posts list, %v", err)
+		}
+
+		want := make([]meshtalk.Post, 0, len(storage.posts))
+		for _, p := range storage.posts {
+			want = append(want, p)
+		}
+
+		if !reflect.DeepEqual(got, want) {
+			t.Errorf("did not get all posts, got %v but want %v", got, want)
+		}
 	})
 }
 

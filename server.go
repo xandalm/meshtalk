@@ -5,11 +5,12 @@ import (
 	"errors"
 	"io"
 	"net/http"
-	"strings"
+	"regexp"
 )
 
 type Storage interface {
 	GetPost(id string) *Post
+	GetPosts() []Post
 	StorePost(post *Post) error
 	EditPost(post *Post) error
 	DeletePost(id string) error
@@ -50,7 +51,7 @@ func NewServer(storage Storage) *Server {
 	return &Server{storage}
 }
 
-func (s *Server) writeResponseModel(w http.ResponseWriter, data any, err *Error) {
+func (s *Server) writeResponseModel(w http.ResponseWriter, data any, err any) {
 	toJSON(
 		w,
 		ResponseModel{
@@ -106,7 +107,13 @@ func (s *Server) storePostHandler(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) getPostHandler(w http.ResponseWriter, r *http.Request) {
-	postID := s.extractPostIdFromURLPath(r)
+	postID, _ := s.extractPostIdFromURLPath(r)
+
+	if postID == "" {
+		w.WriteHeader(http.StatusOK)
+		s.writeResponseModel(w, s.storage.GetPosts(), nil)
+		return
+	}
 
 	foundPost := s.storage.GetPost(postID)
 
@@ -119,7 +126,7 @@ func (s *Server) getPostHandler(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) editPostHandler(w http.ResponseWriter, r *http.Request) {
-	postID := s.extractPostIdFromURLPath(r)
+	postID, _ := s.extractPostIdFromURLPath(r)
 
 	var post Post
 	fromJSON(r.Body, &post)
@@ -140,7 +147,7 @@ func (s *Server) editPostHandler(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) deletePostHandler(w http.ResponseWriter, r *http.Request) {
-	postID := s.extractPostIdFromURLPath(r)
+	postID, _ := s.extractPostIdFromURLPath(r)
 	if err := s.storage.DeletePost(postID); err != nil {
 		w.WriteHeader(http.StatusInternalServerError)
 		return
@@ -148,8 +155,16 @@ func (s *Server) deletePostHandler(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusOK)
 }
 
-func (s *Server) extractPostIdFromURLPath(r *http.Request) string {
-	return strings.TrimPrefix(r.URL.Path, "/posts/")
+func (s *Server) extractPostIdFromURLPath(r *http.Request) (string, error) {
+	specificPostCheck := regexp.MustCompile(`^\/posts(\/(\w*))?$`)
+	if !specificPostCheck.MatchString(r.URL.Path) {
+		return "", errors.New("incompatible url path")
+	}
+	matches := specificPostCheck.FindStringSubmatch(r.URL.Path)
+	if len(matches) > 2 {
+		return matches[2], nil
+	}
+	return "", nil
 }
 
 func toJSON(w io.Writer, s any) error {
