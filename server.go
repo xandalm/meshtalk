@@ -2,6 +2,7 @@ package meshtalk
 
 import (
 	"encoding/json"
+	"errors"
 	"io"
 	"net/http"
 	"strings"
@@ -18,14 +19,27 @@ type Error struct {
 	Message string `json:"message,omitempty"`
 }
 
+func NewError(message string) *Error {
+	return &Error{
+		Message: message,
+	}
+}
+
 type ResponseModel struct {
 	Data  any `json:"data,omitempty"`
 	Error any `json:"error,omitempty"`
 }
 
+const (
+	ErrPostNotFoundMessage      = "there is no such post here"
+	ErrUnsupportedPostMessage   = "unsupported data to parse into post"
+	ErrMissingPostFieldsMessage = "missing post fields (title, content and author are required)"
+)
+
 var (
-	ErrPostNotFound         = Error{"there is no such post here"}
-	ErrNotSupportedPostData = Error{"unsupported data to parse into post"}
+	ErrPostNotFound      = errors.New("ERR_POST_NOT_FOUND")
+	ErrUnsupportedPost   = errors.New("ERR_UNSUPPORTED_POST")
+	ErrMissingPostFields = errors.New("ERR_MISSING_POST_FIELDS")
 )
 
 type Server struct {
@@ -34,6 +48,16 @@ type Server struct {
 
 func NewServer(storage Storage) *Server {
 	return &Server{storage}
+}
+
+func (s *Server) writeResponseModel(w http.ResponseWriter, data any, err *Error) {
+	toJSON(
+		w,
+		ResponseModel{
+			Data:  data,
+			Error: err,
+		},
+	)
 }
 
 func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
@@ -58,28 +82,26 @@ func (s *Server) storePostHandler(w http.ResponseWriter, r *http.Request) {
 	err := fromJSON(r.Body, &post)
 	if err != nil {
 		w.WriteHeader(http.StatusBadRequest)
-		s.writeResponseModel(w, nil, ErrNotSupportedPostData)
+		s.writeResponseModel(w, nil, NewError(ErrUnsupportedPostMessage))
 		return
 	}
+
+	if post.Title == "" || post.Content == "" || post.Author == "" {
+		w.WriteHeader(http.StatusBadRequest)
+		s.writeResponseModel(w, nil, NewError(ErrMissingPostFieldsMessage))
+		return
+	}
+
 	if err := s.storage.StorePost(&post); err != nil {
 		w.WriteHeader(http.StatusInternalServerError)
 		return
 	}
+
 	w.WriteHeader(http.StatusCreated)
 	s.writeResponseModel(
 		w,
 		post,
 		nil,
-	)
-}
-
-func (s *Server) writeResponseModel(w http.ResponseWriter, data any, err any) {
-	toJSON(
-		w,
-		ResponseModel{
-			Data:  data,
-			Error: err,
-		},
 	)
 }
 
@@ -90,7 +112,7 @@ func (s *Server) getPostHandler(w http.ResponseWriter, r *http.Request) {
 
 	if foundPost == nil {
 		w.WriteHeader(http.StatusNotFound)
-		s.writeResponseModel(w, nil, ErrPostNotFound)
+		s.writeResponseModel(w, nil, NewError(ErrPostNotFoundMessage))
 		return
 	}
 	s.writeResponseModel(w, *foundPost, nil)
@@ -103,15 +125,14 @@ func (s *Server) editPostHandler(w http.ResponseWriter, r *http.Request) {
 	fromJSON(r.Body, &post)
 	post.Id = postID
 
-	foundPost := s.storage.GetPost(postID)
-	if foundPost == nil {
-		w.WriteHeader(http.StatusNotFound)
-		s.writeResponseModel(w, nil, ErrPostNotFound)
-		return
-	}
-
 	if err := s.storage.EditPost(&post); err != nil {
-		w.WriteHeader(http.StatusInternalServerError)
+
+		if err == ErrPostNotFound {
+			w.WriteHeader(http.StatusNotFound)
+			s.writeResponseModel(w, nil, NewError(ErrPostNotFoundMessage))
+		} else {
+			w.WriteHeader(http.StatusInternalServerError)
+		}
 		return
 	}
 

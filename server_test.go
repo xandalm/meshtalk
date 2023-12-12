@@ -16,30 +16,46 @@ import (
 )
 
 type StubStorage struct {
-	posts     map[string]*meshtalk.Post
+	posts     map[string]meshtalk.Post
 	editCalls []string
 }
 
 func NewStubStorage() *StubStorage {
 	return &StubStorage{
-		map[string]*meshtalk.Post{},
+		map[string]meshtalk.Post{},
 		[]string{},
 	}
 }
 
 func (s *StubStorage) GetPost(id string) *meshtalk.Post {
-	return s.posts[id]
+	found, ok := s.posts[id]
+	if !ok {
+		return nil
+	}
+	return &meshtalk.Post{
+		Id:        found.Id,
+		Title:     found.Title,
+		Content:   found.Content,
+		Author:    found.Author,
+		CreatedAt: found.CreatedAt,
+		UpdatedAt: found.UpdatedAt,
+		DeletedAt: found.DeletedAt,
+	}
 }
 
 func (s *StubStorage) StorePost(post *meshtalk.Post) error {
 	post.Id = strconv.Itoa(len(s.posts) + 1)
 	createdAt := time.Now()
 	post.CreatedAt = &createdAt
-	s.posts[post.Id] = post
+	s.posts[post.Id] = *post
 	return nil
 }
 
 func (s *StubStorage) EditPost(post *meshtalk.Post) error {
+	_, ok := s.posts[post.Id]
+	if !ok {
+		return meshtalk.ErrPostNotFound
+	}
 	s.editCalls = append(s.editCalls, post.Id)
 	return nil
 }
@@ -50,11 +66,11 @@ func (s *StubStorage) DeletePost(id string) error {
 }
 
 type StubFailingStorage struct {
-	posts map[string]*meshtalk.Post
+	posts map[string]meshtalk.Post
 }
 
 func (s *StubFailingStorage) GetPost(id string) *meshtalk.Post {
-	return s.posts[id]
+	return nil
 }
 
 func (s *StubFailingStorage) StorePost(post *meshtalk.Post) error {
@@ -71,7 +87,7 @@ func (s *StubFailingStorage) DeletePost(id string) error {
 
 func TestGetPost(t *testing.T) {
 	storage := &StubStorage{
-		posts: map[string]*meshtalk.Post{
+		posts: map[string]meshtalk.Post{
 			"1": {
 				Id:        "1",
 				Title:     "Post 1",
@@ -100,7 +116,7 @@ func TestGetPost(t *testing.T) {
 		assertStatus(t, response, http.StatusOK)
 
 		got := getPostFromResponseModel(t, response.Body)
-		want := *storage.posts["1"]
+		want := storage.posts["1"]
 
 		assertGotPost(t, got, want)
 	})
@@ -115,12 +131,12 @@ func TestGetPost(t *testing.T) {
 		assertStatus(t, response, http.StatusOK)
 
 		got := getPostFromResponseModel(t, response.Body)
-		want := *storage.posts["2"]
+		want := storage.posts["2"]
 
 		assertGotPost(t, got, want)
 	})
 
-	t.Run("returns 404 on missing posts", func(t *testing.T) {
+	t.Run("returns 404 on nonexistent post", func(t *testing.T) {
 		request := newGetPostRequest("0")
 		response := httptest.NewRecorder()
 
@@ -129,7 +145,9 @@ func TestGetPost(t *testing.T) {
 		assertStatus(t, response, http.StatusNotFound)
 
 		got := getErrorFromResponseModel(t, response.Body)
-		want := meshtalk.ErrPostNotFound
+		want := meshtalk.Error{
+			meshtalk.ErrPostNotFoundMessage,
+		}
 
 		assertGotError(t, got, want)
 	})
@@ -185,16 +203,36 @@ func TestStorePost(t *testing.T) {
 
 	t.Run("returns 400 when request with incompatible json data", func(t *testing.T) {
 
-		request := newStorePostRequest(`x`)
-		response := httptest.NewRecorder()
+		t.Run("returns 400 and unsupported error", func(t *testing.T) {
+			request := newStorePostRequest(`data`)
+			response := httptest.NewRecorder()
 
-		server.ServeHTTP(response, request)
+			server.ServeHTTP(response, request)
 
-		assertStatus(t, response, http.StatusBadRequest)
+			assertStatus(t, response, http.StatusBadRequest)
 
-		err := getErrorFromResponseModel(t, response.Body)
+			got := getErrorFromResponseModel(t, response.Body)
+			want := meshtalk.Error{
+				meshtalk.ErrUnsupportedPostMessage,
+			}
 
-		assertGotError(t, err, meshtalk.ErrNotSupportedPostData)
+			assertGotError(t, got, want)
+		})
+		t.Run("returns 400 and missing fields error", func(t *testing.T) {
+			request := newStorePostRequest(`{}`)
+			response := httptest.NewRecorder()
+
+			server.ServeHTTP(response, request)
+
+			assertStatus(t, response, http.StatusBadRequest)
+
+			got := getErrorFromResponseModel(t, response.Body)
+			want := meshtalk.Error{
+				meshtalk.ErrMissingPostFieldsMessage,
+			}
+
+			assertGotError(t, got, want)
+		})
 	})
 
 	t.Run("returns 500 on unexpected error", func(t *testing.T) {
@@ -216,9 +254,9 @@ func TestStorePost(t *testing.T) {
 
 func TestEditPost(t *testing.T) {
 	storage := &StubStorage{
-		posts: map[string]*meshtalk.Post{
-			"1": meshtalk.NewPost("1", "Post 1", "Post Content", "Alex"),
-			"2": meshtalk.NewPost("2", "Post 2", "Post Content", "Andre"),
+		posts: map[string]meshtalk.Post{
+			"1": *meshtalk.NewPost("1", "Post 1", "Post Content", "Alex"),
+			"2": *meshtalk.NewPost("2", "Post 2", "Post Content", "Andre"),
 		},
 	}
 	server := meshtalk.NewServer(storage)
@@ -236,7 +274,7 @@ func TestEditPost(t *testing.T) {
 			t.Error("did not edited the post")
 		}
 	})
-	t.Run("returns 404 on missing post when edit", func(t *testing.T) {
+	t.Run("returns 404 on nonexistent post", func(t *testing.T) {
 		jsonRaw := `{"Content": "Edited Content"}`
 		request := newEditPostRequest("3", jsonRaw)
 		response := httptest.NewRecorder()
@@ -246,14 +284,16 @@ func TestEditPost(t *testing.T) {
 		assertStatus(t, response, http.StatusNotFound)
 
 		got := getErrorFromResponseModel(t, response.Body)
-		want := meshtalk.ErrPostNotFound
+		want := meshtalk.Error{
+			meshtalk.ErrPostNotFoundMessage,
+		}
 
 		assertGotError(t, got, want)
 	})
 	t.Run("returns 500 on unexpected error", func(t *testing.T) {
 		storage := &StubFailingStorage{
-			posts: map[string]*meshtalk.Post{
-				"1": meshtalk.NewPost("1", "Post 1", "Post Content", "Alex"),
+			posts: map[string]meshtalk.Post{
+				"1": *meshtalk.NewPost("1", "Post 1", "Post Content", "Alex"),
 			},
 		}
 		server := meshtalk.NewServer(storage)
@@ -270,8 +310,8 @@ func TestEditPost(t *testing.T) {
 func TestDeletePost(t *testing.T) {
 	t.Run("returns 200 on post deleted", func(t *testing.T) {
 		storage := &StubStorage{
-			posts: map[string]*meshtalk.Post{
-				"1": meshtalk.NewPost("1", "Post 1", "Post Content", "Alex"),
+			posts: map[string]meshtalk.Post{
+				"1": *meshtalk.NewPost("1", "Post 1", "Post Content", "Alex"),
 			},
 		}
 		server := meshtalk.NewServer(storage)
