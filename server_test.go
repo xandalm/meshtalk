@@ -181,14 +181,10 @@ func TestGetPost(t *testing.T) {
 			t.Fatalf("unable to parse data into posts list, %v", err)
 		}
 
-		want := make([]meshtalk.Post, 0, len(storage.posts))
 		for _, p := range storage.posts {
-			want = append(want, p)
+			assertContains(t, got, p)
 		}
 
-		if !reflect.DeepEqual(got, want) {
-			t.Errorf("did not get all posts, got %v but want %v", got, want)
-		}
 	})
 }
 
@@ -423,6 +419,20 @@ func assertGotError(t testing.TB, got, want meshtalk.Error) {
 
 	if !reflect.DeepEqual(got, want) {
 		t.Errorf("got error %q, but want %q", got, want)
+	}
+}
+
+func assertContains(t testing.TB, list []meshtalk.Post, needle meshtalk.Post) {
+	t.Helper()
+	contains := false
+	for _, n := range list {
+		if reflect.DeepEqual(n, needle) {
+			contains = true
+			break
+		}
+	}
+	if !contains {
+		t.Errorf("expected %v to contain %q but it didn't", list, needle)
 	}
 }
 

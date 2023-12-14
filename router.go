@@ -31,14 +31,14 @@ type Request struct {
 
 func (ro *Request) Params() map[string]string {
 	if ro.params == nil {
-		ro.params = make(map[string]string)
+		return make(map[string]string)
 	}
 	return ro.params
 }
 
 func (ro *Request) Query() map[string]string {
 	if ro.query == nil {
-		ro.query = make(map[string]string)
+		return make(map[string]string)
 	}
 	return ro.query
 }
@@ -55,10 +55,55 @@ func (ro *Router) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 	path := r.URL.Path
 
+	// Exatly match
 	t, ok := ro.m[path]
 	if ok {
 		t.h.ServeHTTP(w, req)
+		return
 	}
+
+	for _, e := range ro.m {
+		if e.regexp.MatchString(path) {
+			matches := e.regexp.FindStringSubmatch(path)
+			req.params = map[string]string{}
+
+			for i, tag := range e.regexp.SubexpNames() {
+				if i != 0 && tag != "" {
+					req.params[tag] = matches[i]
+				}
+			}
+			e.h.ServeHTTP(w, req)
+			break
+		}
+	}
+}
+
+func findParamsBound(pattern string) [][]int {
+	paramsSeeker := regexp.MustCompile(`\/\{\w+\}`)
+	return paramsSeeker.FindAllStringIndex(pattern, -1)
+}
+
+func createRegExp(pattern string, paramsBound [][]int) *regexp.Regexp {
+	if len(paramsBound) > 0 {
+		builder := strings.Builder{}
+
+		builder.WriteRune('^')
+		b := paramsBound[0]
+		i := 0
+		builder.WriteString(pattern[i:b[0]])
+		builder.WriteString(`/(?P<` + pattern[(b[0]+2):(b[1]-1)] + `>\w+)`)
+		for _, boundary := range paramsBound[1:] {
+			i = b[1]
+			b = boundary
+			builder.WriteString(pattern[i:b[0]])
+			builder.WriteString(`/(?P<` + pattern[(b[0]+2):(b[1]-1)] + `>\w+)`)
+		}
+		builder.WriteString(pattern[b[1]:] + "$")
+
+		return regexp.MustCompile(strings.ReplaceAll(builder.String(), "/", `\/`))
+	}
+
+	return regexp.MustCompile("^" + strings.ReplaceAll(pattern, "/", `\/`) + "$")
 }
 
 func (ro *Router) Use(pattern string, handle RouteHandler) {
@@ -69,39 +114,14 @@ func (ro *Router) Use(pattern string, handle RouteHandler) {
 		ro.m = make(map[string]routerEntry)
 	}
 
-	declaredParamsSeeker := regexp.MustCompile(`\/\{\w+\}`)
-	declaredParamsBoundary := declaredParamsSeeker.FindAllStringIndex(pattern, -1)
+	paramsBound := findParamsBound(pattern)
 
-	if len(declaredParamsBoundary) > 0 {
-
-		builder := strings.Builder{}
-
-		builder.WriteRune('^')
-		b := declaredParamsBoundary[0]
-		i := 0
-		builder.WriteString(pattern[i:b[0]])
-		builder.WriteString(`/\w+`)
-		for _, boundary := range declaredParamsBoundary[1:] {
-			i = b[1]
-			b = boundary
-			builder.WriteString(pattern[i:b[0]])
-			builder.WriteString(`/\w+`)
-		}
-
-		builder.WriteString(pattern[b[1]:] + "$")
-
-		ro.m[pattern] = routerEntry{
-			handle,
-			pattern,
-			*regexp.MustCompile(strings.ReplaceAll(builder.String(), "/", `\/`)),
-		}
-		return
-	}
+	patternRegExp := createRegExp(pattern, paramsBound)
 
 	ro.m[pattern] = routerEntry{
 		handle,
 		pattern,
-		*regexp.MustCompile("^" + strings.ReplaceAll(pattern, "/", `\/`) + "$"),
+		*patternRegExp,
 	}
 }
 
