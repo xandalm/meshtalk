@@ -83,22 +83,27 @@ func findParamsBound(pattern string) [][]int {
 	return paramsSeeker.FindAllStringIndex(pattern, -1)
 }
 
+func taggedParam(pattern string, s, e int) string {
+	return `/(?P<` + pattern[(s+2):(e-1)] + `>\w+)`
+}
+
 func createRegExp(pattern string, paramsBound [][]int) *regexp.Regexp {
 	if len(paramsBound) > 0 {
 		builder := strings.Builder{}
 
 		builder.WriteRune('^')
-		b := paramsBound[0]
+
 		i := 0
-		builder.WriteString(pattern[i:b[0]])
-		builder.WriteString(`/(?P<` + pattern[(b[0]+2):(b[1]-1)] + `>\w+)`)
-		for _, boundary := range paramsBound[1:] {
-			i = b[1]
-			b = boundary
+		for _, b := range paramsBound {
 			builder.WriteString(pattern[i:b[0]])
-			builder.WriteString(`/(?P<` + pattern[(b[0]+2):(b[1]-1)] + `>\w+)`)
+			builder.WriteString(taggedParam(pattern, b[0], b[1]))
+			i = b[1]
 		}
-		builder.WriteString(pattern[b[1]:] + "$")
+		if i < (len(pattern) - 1) {
+			builder.WriteString(pattern[i:])
+		}
+
+		builder.WriteString("$")
 
 		return regexp.MustCompile(strings.ReplaceAll(builder.String(), "/", `\/`))
 	}

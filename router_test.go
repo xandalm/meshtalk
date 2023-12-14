@@ -58,21 +58,13 @@ func TestRouterPatterns(t *testing.T) {
 			router := NewRouter()
 			router.UseFunc(c.pattern, dummyHandle)
 
-			got, ok := router.m[c.pattern]
+			req, err := http.NewRequest(http.MethodGet, "http://dummy.site"+c.path, nil)
 
-			if !ok {
-				t.Fatal("did not add pattern")
+			if err != nil {
+				t.Fatalf("unable to create http request, %v", err)
 			}
 
-			if (got.pattern != c.want.pattern) || (got.regexp.String() != c.want.regexp.String()) {
-				t.Errorf(`got {pattern: "%s", regexp: %q}, want {pattern: "%s", regexp: %q}`, got.pattern, got.regexp.String(), c.want.pattern, c.want.regexp.String())
-			}
-
-			req, _ := http.NewRequest(http.MethodGet, "http://dummy.site"+c.path, nil)
-
-			if !got.regexp.MatchString(req.URL.Path) {
-				t.Fatalf(`did not match incoming "%s" url path`, c.path)
-			}
+			checkRouterEntries(t, router, c.want, req)
 		})
 	}
 }
@@ -83,31 +75,85 @@ type SpyRequestParams struct {
 
 func TestRouterParams(t *testing.T) {
 
-	spy := SpyRequestParams{}
+	cases := []struct {
+		pattern string
+		path    string
+		want    map[string]string
+	}{
+		{
+			"/user/{id}",
+			"/user/1",
+			map[string]string{
+				"id": "1",
+			},
+		},
+		{
+			"/org/{oid}/member/{mid}",
+			"/org/1/member/11",
+			map[string]string{
+				"oid": "1",
+				"mid": "11",
+			},
+		},
+	}
+	var spy *SpyRequestParams
 
-	pattern := "/user/{id}"
 	handle := RouteHandlerFunc(func(w http.ResponseWriter, r *Request) {
 		spy.params = r.Params()
 	})
-
-	path := "/user/10"
-
 	router := NewRouter()
-	router.UseFunc(pattern, handle)
 
-	request, _ := http.NewRequest(http.MethodGet, "http://dummy.site"+path, nil)
-	response := httptest.NewRecorder()
+	spy = &SpyRequestParams{}
 
-	router.ServeHTTP(response, request)
+	for _, c := range cases {
+		t.Run(fmt.Sprintf(`add route to "%q", get with path "%q"`, c.pattern, c.path), func(t *testing.T) {
+			router.UseFunc(c.pattern, handle)
+			request, _ := http.NewRequest(http.MethodGet, "http://dummy.site"+c.path, nil)
+			response := httptest.NewRecorder()
 
-	got, ok := spy.params["id"]
-	want := "10"
+			router.ServeHTTP(response, request)
+
+			checkParams(t, spy.params, c.want)
+		})
+	}
+}
+
+func checkRouterEntries(t *testing.T, router *Router, want routerEntry, request *http.Request) {
+	t.Helper()
+
+	got, ok := router.m[want.pattern]
 
 	if !ok {
-		t.Errorf(`expected %v to contain "id" but it didn't`, spy.params)
+		t.Fatal("did not add pattern")
 	}
 
-	if got != want {
-		t.Errorf(`expected id equal to %q but got %q`, want, got)
+	if (got.pattern != want.pattern) || (got.regexp.String() != want.regexp.String()) {
+		t.Errorf(`got {pattern: "%s", regexp: %q}, want {pattern: "%s", regexp: %q}`, got.pattern, got.regexp.String(), want.pattern, want.regexp.String())
+	}
+
+	assertRouterEntryMatchesUrl(t, got, request)
+}
+
+func assertRouterEntryMatchesUrl(t testing.TB, entry routerEntry, request *http.Request) {
+	t.Helper()
+
+	if !entry.regexp.MatchString(request.URL.Path) {
+		t.Fatalf(`did not match incoming "%s" url`, request.URL)
+	}
+}
+
+func checkParams(t *testing.T, got, want map[string]string) {
+	t.Helper()
+
+	for key, value := range want {
+		got, ok := got[key]
+
+		if !ok {
+			t.Fatalf(`expected %v to contain %s but it didn't`, got, key)
+		}
+
+		if got != value {
+			t.Errorf(`expected %s equal to %q but got %q`, key, value, got)
+		}
 	}
 }
