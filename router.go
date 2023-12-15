@@ -51,31 +51,47 @@ type Router struct {
 func NewRouter() *Router { return new(Router) }
 
 func (ro *Router) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+
 	req := &Request{nil, nil, r}
+
+	_, h := ro.Handler(req)
+	h.ServeHTTP(w, req)
+}
+
+func (ro *Router) Handler(r *Request) (pattern string, handler RouteHandler) {
+
+	return ro.match(r)
+}
+
+func (ro *Router) match(r *Request) (string, RouteHandler) {
 
 	path := r.URL.Path
 
 	// Exatly match
-	t, ok := ro.m[path]
+	e, ok := ro.m[path]
 	if ok {
-		t.h.ServeHTTP(w, req)
-		return
+		return e.pattern, e.h
 	}
 
 	for _, e := range ro.m {
 		if e.regexp.MatchString(path) {
 			matches := e.regexp.FindStringSubmatch(path)
-			req.params = map[string]string{}
+			r.params = map[string]string{}
 
 			for i, tag := range e.regexp.SubexpNames() {
 				if i != 0 && tag != "" {
-					req.params[tag] = matches[i]
+					r.params[tag] = matches[i]
 				}
 			}
-			e.h.ServeHTTP(w, req)
-			break
+			return e.pattern, e.h
 		}
 	}
+
+	return "", NotFoundHandler()
+}
+
+func NotFoundHandler() RouteHandler {
+	return RouteHandlerFunc(func(w http.ResponseWriter, r *Request) { http.Error(w, "404 page not found", http.StatusNotFound) })
 }
 
 func findParamsBound(pattern string) [][]int {
@@ -88,6 +104,9 @@ func taggedParam(pattern string, s, e int) string {
 }
 
 func createRegExp(pattern string, paramsBound [][]int) *regexp.Regexp {
+
+	shouldMakeSlashOptional := pattern[len(pattern)-1] == '/'
+
 	if len(paramsBound) > 0 {
 		builder := strings.Builder{}
 
@@ -103,9 +122,17 @@ func createRegExp(pattern string, paramsBound [][]int) *regexp.Regexp {
 			builder.WriteString(pattern[i:])
 		}
 
+		if shouldMakeSlashOptional {
+			builder.WriteRune('?')
+		}
+
 		builder.WriteString("$")
 
 		return regexp.MustCompile(strings.ReplaceAll(builder.String(), "/", `\/`))
+	}
+
+	if shouldMakeSlashOptional {
+		return regexp.MustCompile("^" + strings.ReplaceAll(pattern, "/", `\/`) + "?$")
 	}
 
 	return regexp.MustCompile("^" + strings.ReplaceAll(pattern, "/", `\/`) + "$")
@@ -123,11 +150,13 @@ func (ro *Router) Use(pattern string, handle RouteHandler) {
 
 	patternRegExp := createRegExp(pattern, paramsBound)
 
-	ro.m[pattern] = routerEntry{
+	e := routerEntry{
 		handle,
 		pattern,
 		*patternRegExp,
 	}
+
+	ro.m[pattern] = e
 }
 
 func (ro *Router) UseFunc(pattern string, handler func(w http.ResponseWriter, r *Request)) {

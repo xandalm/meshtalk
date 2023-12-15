@@ -1,70 +1,102 @@
-package meshtalk
+package meshtalk_test
 
 import (
 	"fmt"
+	"meshtalk"
 	"net/http"
 	"net/http/httptest"
-	"regexp"
+	"strings"
 	"testing"
 )
 
+type StubRouterHandler struct {
+	recognized []string
+}
+
+func (h *StubRouterHandler) ServeHTTP(w http.ResponseWriter, r *meshtalk.Request) {
+	h.recognized = append(h.recognized, r.URL.String())
+}
+
+type keyValue map[string]string
+
+const dummyHost = "http://dummy.site"
+
+func makeDummyHostUrl(path string, query keyValue) string {
+	if len(query) > 0 {
+		q := strings.Builder{}
+		for k, v := range query {
+			q.WriteString(k + "=" + v + "&")
+		}
+		return dummyHost + path + fmt.Sprintf("?%s", q.String()[:q.Len()-1])
+	}
+	return dummyHost + path
+}
+
 func TestRouterPatterns(t *testing.T) {
-	dummyHandle := RouteHandlerFunc(func(w http.ResponseWriter, r *Request) {})
+
 	cases := []struct {
 		pattern string
-		want    routerEntry
-		path    string
+		pass    []string
+		nopass  []string
 	}{
 		{
 			"/user",
-			routerEntry{
-				dummyHandle,
-				"/user",
-				*regexp.MustCompile(`^\/user$`),
+			[]string{
+				makeDummyHostUrl("/user", nil),
 			},
-			"/user",
+			[]string{
+				makeDummyHostUrl("/user/1", nil),
+			},
 		},
 		{
 			"/user/{id}",
-			routerEntry{
-				dummyHandle,
-				"/user/{id}",
-				*regexp.MustCompile(`^\/user\/(?P<id>\w+)$`),
+			[]string{
+				makeDummyHostUrl("/user/1", nil),
 			},
-			"/user/1",
+			[]string{
+				makeDummyHostUrl("/user", nil),
+			},
 		},
 		{
 			"/org/{oid}/member/{mid}",
-			routerEntry{
-				dummyHandle,
-				"/org/{oid}/member/{mid}",
-				*regexp.MustCompile(`^\/org\/(?P<oid>\w+)\/member\/(?P<mid>\w+)$`),
+			[]string{
+				makeDummyHostUrl("/org/e6af1/member/1f276aeeab026521d532c5d3f10dd428", nil),
 			},
-			"/org/e6af1/member/1f276aeeab026521d532c5d3f10dd428",
+			[]string{
+				makeDummyHostUrl("/org", nil),
+			},
 		},
 		{
 			"/storage/{id}",
-			routerEntry{
-				dummyHandle,
-				"/storage/{id}",
-				*regexp.MustCompile(`^\/storage\/(?P<id>\w+)$`),
+			[]string{
+				makeDummyHostUrl("/storage/20", keyValue{"take": "food"}),
 			},
-			"/storage/20?take=foods",
+			[]string{
+				makeDummyHostUrl("/storag", nil),
+			},
+		},
+		{
+			"/user/",
+			[]string{
+				makeDummyHostUrl("/user/", nil),
+				makeDummyHostUrl("/user", nil),
+			},
+			[]string{
+				makeDummyHostUrl("/user/1", nil),
+			},
 		},
 	}
 
 	for _, c := range cases {
 		t.Run(fmt.Sprintf(`adding handle for "%s"`, c.pattern), func(t *testing.T) {
-			router := NewRouter()
-			router.UseFunc(c.pattern, dummyHandle)
+			router := meshtalk.NewRouter()
 
-			req, err := http.NewRequest(http.MethodGet, "http://dummy.site"+c.path, nil)
+			handler := &StubRouterHandler{}
 
-			if err != nil {
-				t.Fatalf("unable to create http request, %v", err)
-			}
+			router.Use(c.pattern, handler)
 
-			checkRouterEntries(t, router, c.want, req)
+			checkRouterHandleUrls(t, router, handler, c.pass)
+			checkRouterNotHandleUrls(t, router, handler, c.nopass)
 		})
 	}
 }
@@ -98,16 +130,16 @@ func TestRouterParams(t *testing.T) {
 	}
 	var spy *SpyRequestParams
 
-	handle := RouteHandlerFunc(func(w http.ResponseWriter, r *Request) {
+	handler := meshtalk.RouteHandlerFunc(func(w http.ResponseWriter, r *meshtalk.Request) {
 		spy.params = r.Params()
 	})
-	router := NewRouter()
+	router := meshtalk.NewRouter()
 
 	spy = &SpyRequestParams{}
 
 	for _, c := range cases {
 		t.Run(fmt.Sprintf(`add route to "%q", get with path "%q"`, c.pattern, c.path), func(t *testing.T) {
-			router.UseFunc(c.pattern, handle)
+			router.UseFunc(c.pattern, handler)
 			request, _ := http.NewRequest(http.MethodGet, "http://dummy.site"+c.path, nil)
 			response := httptest.NewRecorder()
 
@@ -118,27 +150,53 @@ func TestRouterParams(t *testing.T) {
 	}
 }
 
-func checkRouterEntries(t *testing.T, router *Router, want routerEntry, request *http.Request) {
+func checkRouterHandleUrls(t *testing.T, router *meshtalk.Router, handler *StubRouterHandler, urls []string) {
 	t.Helper()
 
-	got, ok := router.m[want.pattern]
+	for _, url := range urls {
+		request, err := http.NewRequest(http.MethodGet, url, nil)
+		if err != nil {
+			t.Fatalf("unable to create http request, %v", err)
+		}
+		response := httptest.NewRecorder()
 
-	if !ok {
-		t.Fatal("did not add pattern")
+		router.ServeHTTP(response, request)
+
+		assertRouterHandle(t, handler, url, true)
 	}
-
-	if (got.pattern != want.pattern) || (got.regexp.String() != want.regexp.String()) {
-		t.Errorf(`got {pattern: "%s", regexp: %q}, want {pattern: "%s", regexp: %q}`, got.pattern, got.regexp.String(), want.pattern, want.regexp.String())
-	}
-
-	assertRouterEntryMatchesUrl(t, got, request)
 }
 
-func assertRouterEntryMatchesUrl(t testing.TB, entry routerEntry, request *http.Request) {
+func checkRouterNotHandleUrls(t *testing.T, router *meshtalk.Router, handler *StubRouterHandler, urls []string) {
 	t.Helper()
 
-	if !entry.regexp.MatchString(request.URL.Path) {
-		t.Fatalf(`did not match incoming "%s" url`, request.URL)
+	for _, url := range urls {
+		request, err := http.NewRequest(http.MethodGet, url, nil)
+		if err != nil {
+			t.Fatalf("unable to create http request, %v", err)
+		}
+		response := httptest.NewRecorder()
+
+		router.ServeHTTP(response, request)
+
+		assertRouterHandle(t, handler, url, false)
+	}
+}
+
+func assertRouterHandle(t testing.TB, handler *StubRouterHandler, url string, expect bool) {
+	t.Helper()
+
+	contains := false
+	for _, n := range handler.recognized {
+		if n == url {
+			contains = true
+			break
+		}
+	}
+	if expect && expect != contains {
+		t.Fatalf("expected %v to contain %q but it didn't", handler.recognized, url)
+	}
+	if !expect && expect != contains {
+		t.Fatalf("expected %v to not contain %q but it did", handler.recognized, url)
 	}
 }
 
