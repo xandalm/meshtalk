@@ -69,7 +69,7 @@ func (ro *Router) match(r *Request) (string, RouteHandler) {
 
 	// Exatly match
 	e, ok := ro.m[path]
-	if ok {
+	if ok && e.regexp.MatchString(path) {
 		return e.pattern, e.h
 	}
 
@@ -95,12 +95,12 @@ func NotFoundHandler() RouteHandler {
 }
 
 func findParamsBound(pattern string) [][]int {
-	paramsSeeker := regexp.MustCompile(`\/\{\w+\}`)
+	paramsSeeker := regexp.MustCompile(`\/\{[^\/]+\}`)
 	return paramsSeeker.FindAllStringIndex(pattern, -1)
 }
 
 func taggedParam(pattern string, s, e int) string {
-	return `/(?P<` + pattern[(s+2):(e-1)] + `>\w+)`
+	return `/(?P<` + pattern[(s+2):(e-1)] + `>[^\/]+)`
 }
 
 func createRegExp(pattern string, paramsBound [][]int) *regexp.Regexp {

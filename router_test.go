@@ -5,16 +5,19 @@ import (
 	"meshtalk"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"strings"
 	"testing"
 )
 
 type StubRouterHandler struct {
-	recognized []string
+	recognized    []string
+	numberOfCalls int
 }
 
 func (h *StubRouterHandler) ServeHTTP(w http.ResponseWriter, r *meshtalk.Request) {
 	h.recognized = append(h.recognized, r.URL.String())
+	h.numberOfCalls++
 }
 
 type keyValue map[string]string
@@ -22,14 +25,26 @@ type keyValue map[string]string
 const dummyHost = "http://dummy.site"
 
 func makeDummyHostUrl(path string, query keyValue) string {
-	if len(query) > 0 {
-		q := strings.Builder{}
-		for k, v := range query {
-			q.WriteString(k + "=" + v + "&")
+	u := strings.Builder{}
+	u.WriteString(dummyHost)
+
+	if path != "" {
+		for _, pl := range strings.Split(path, "/")[1:] {
+			u.WriteRune('/')
+			if pl != "" {
+				u.WriteString(url.PathEscape(pl))
+			}
 		}
-		return dummyHost + path + fmt.Sprintf("?%s", q.String()[:q.Len()-1])
 	}
-	return dummyHost + path
+
+	if len(query) > 0 {
+		u.WriteRune('?')
+		for k, v := range query {
+			u.WriteString(url.QueryEscape(k) + "=" + url.QueryEscape(v) + "&")
+		}
+		return u.String()[:u.Len()-1]
+	}
+	return u.String()
 }
 
 func TestRouterPatterns(t *testing.T) {
@@ -52,6 +67,7 @@ func TestRouterPatterns(t *testing.T) {
 			"/user/{id}",
 			[]string{
 				makeDummyHostUrl("/user/1", nil),
+				makeDummyHostUrl("/user/{id}", nil),
 			},
 			[]string{
 				makeDummyHostUrl("/user", nil),
@@ -99,6 +115,35 @@ func TestRouterPatterns(t *testing.T) {
 			checkRouterNotHandleUrls(t, router, handler, c.nopass)
 		})
 	}
+
+	t.Run(`dintinguish "/users/" and "/users" when both is added`, func(t *testing.T) {
+		router := meshtalk.NewRouter()
+
+		handlerOne := &StubRouterHandler{}
+		handlerTwo := &StubRouterHandler{}
+
+		router.Use("/users/", handlerOne)
+		router.Use("/users", handlerTwo)
+
+		requestOne, _ := http.NewRequest(http.MethodGet, makeDummyHostUrl("/users/", nil), nil)
+		responseOne := httptest.NewRecorder()
+
+		requestTwo, _ := http.NewRequest(http.MethodGet, makeDummyHostUrl("/users", nil), nil)
+		responseTwo := httptest.NewRecorder()
+
+		router.ServeHTTP(responseOne, requestOne)
+		router.ServeHTTP(responseTwo, requestTwo)
+
+		assertStatus(t, responseOne, http.StatusOK)
+		assertStatus(t, responseTwo, http.StatusOK)
+
+		if handlerOne.numberOfCalls != 1 {
+			t.Errorf("didn't call handler from /users/")
+		}
+		if handlerTwo.numberOfCalls != 1 {
+			t.Errorf("didn't call handler from /users")
+		}
+	})
 }
 
 type SpyRequestParams struct {
@@ -193,10 +238,11 @@ func assertRouterHandle(t testing.TB, handler *StubRouterHandler, url string, ex
 		}
 	}
 	if expect && expect != contains {
-		t.Fatalf("expected %v to contain %q but it didn't", handler.recognized, url)
+		t.Errorf("expected %v to contain %q but it didn't", handler.recognized, url)
+		return
 	}
 	if !expect && expect != contains {
-		t.Fatalf("expected %v to not contain %q but it did", handler.recognized, url)
+		t.Errorf("expected %v to not contain %q but it did", handler.recognized, url)
 	}
 }
 
