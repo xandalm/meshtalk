@@ -47,6 +47,53 @@ func makeDummyHostUrl(path string, query keyValue) string {
 	return u.String()
 }
 
+func TestRouterUse(t *testing.T) {
+	handler := &StubRouterHandler{}
+	router := meshtalk.NewRouter()
+	t.Run("panic if try to register	empty pattern", func(t *testing.T) {
+		defer func() {
+			r := recover()
+			str, ok := r.(string)
+			if !ok || str != "router: invalid pattern" {
+				t.Error(`didn't panic "router: invalid pattern"`)
+			}
+		}()
+		router.Use("", handler)
+	})
+	t.Run("panic if try to register nil handler", func(t *testing.T) {
+		defer func() {
+			r := recover()
+			str, ok := r.(string)
+			if !ok || str != "router: nil handler" {
+				t.Error(`didn't panic "router: nil handler"`)
+			}
+		}()
+		router.Use("/pattern", nil)
+	})
+	t.Run("panic if try to register pattern again", func(t *testing.T) {
+		defer func() {
+			r := recover()
+			str, ok := r.(string)
+			if !ok || str != "router: multiple registration for /pattern" {
+				t.Error(`didn't panic "router: multiple registration for /pattern"`)
+			}
+		}()
+		router.Use("/pattern", handler)
+		router.Use("/pattern", handler)
+	})
+
+	t.Run("usefunc panic if try to register nil handler", func(t *testing.T) {
+		defer func() {
+			r := recover()
+			str, ok := r.(string)
+			if !ok || str != "router: nil handler" {
+				t.Error(`didn't panic "router: nil handler"`)
+			}
+		}()
+		router.UseFunc("/pattern", nil)
+	})
+}
+
 func TestRouterPatterns(t *testing.T) {
 
 	cases := []struct {
@@ -138,7 +185,7 @@ func TestRouterPatterns(t *testing.T) {
 		assertStatus(t, responseTwo, http.StatusOK)
 
 		if handlerOne.numberOfCalls != 1 {
-			t.Errorf("didn't call handler from /users/")
+			t.Fatalf("didn't call handler from /users/")
 		}
 		if handlerTwo.numberOfCalls != 1 {
 			t.Errorf("didn't call handler from /users")
@@ -165,6 +212,13 @@ func TestRouterParams(t *testing.T) {
 			},
 		},
 		{
+			"/user/{id}",
+			"/user/{id}",
+			map[string]string{
+				"id": "{id}",
+			},
+		},
+		{
 			"/org/{oid}/member/{mid}",
 			"/org/1/member/11",
 			map[string]string{
@@ -178,12 +232,12 @@ func TestRouterParams(t *testing.T) {
 	handler := meshtalk.RouteHandlerFunc(func(w http.ResponseWriter, r *meshtalk.Request) {
 		spy.params = r.Params()
 	})
-	router := meshtalk.NewRouter()
 
 	spy = &SpyRequestParams{}
 
 	for _, c := range cases {
-		t.Run(fmt.Sprintf(`add route to "%q", get with path "%q"`, c.pattern, c.path), func(t *testing.T) {
+		t.Run(fmt.Sprintf("add route to %q, get with path %q", c.pattern, c.path), func(t *testing.T) {
+			router := meshtalk.NewRouter()
 			router.UseFunc(c.pattern, handler)
 			request, _ := http.NewRequest(http.MethodGet, "http://dummy.site"+c.path, nil)
 			response := httptest.NewRecorder()
@@ -250,14 +304,10 @@ func checkParams(t *testing.T, got, want map[string]string) {
 	t.Helper()
 
 	for key, value := range want {
-		got, ok := got[key]
+		gotValue, ok := got[key]
 
-		if !ok {
-			t.Fatalf(`expected %v to contain %s but it didn't`, got, key)
-		}
-
-		if got != value {
-			t.Errorf(`expected %s equal to %q but got %q`, key, value, got)
+		if !ok || gotValue != value {
+			t.Fatalf(`expected %v to contain %s equal to %q but it didn't`, got, key, value)
 		}
 	}
 }

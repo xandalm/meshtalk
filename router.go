@@ -59,7 +59,8 @@ func (ro *Router) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 }
 
 func (ro *Router) Handler(r *Request) (pattern string, handler RouteHandler) {
-
+	ro.mu.RLock()
+	defer ro.mu.RUnlock()
 	return ro.match(r)
 }
 
@@ -70,6 +71,14 @@ func (ro *Router) match(r *Request) (string, RouteHandler) {
 	// Exatly match
 	e, ok := ro.m[path]
 	if ok && e.regexp.MatchString(path) {
+		matches := e.regexp.FindStringSubmatch(path)
+		r.params = map[string]string{}
+
+		for i, tag := range e.regexp.SubexpNames() {
+			if i != 0 && tag != "" {
+				r.params[tag] = matches[i]
+			}
+		}
 		return e.pattern, e.h
 	}
 
@@ -138,9 +147,19 @@ func createRegExp(pattern string, paramsBound [][]int) *regexp.Regexp {
 	return regexp.MustCompile("^" + strings.ReplaceAll(pattern, "/", `\/`) + "$")
 }
 
-func (ro *Router) Use(pattern string, handle RouteHandler) {
+func (ro *Router) Use(pattern string, handler RouteHandler) {
 	ro.mu.Lock()
 	defer ro.mu.Unlock()
+
+	if pattern == "" {
+		panic("router: invalid pattern")
+	}
+	if handler == nil {
+		panic("router: nil handler")
+	}
+	if _, ok := ro.m[pattern]; ok {
+		panic("router: multiple registration for " + pattern)
+	}
 
 	if ro.m == nil {
 		ro.m = make(map[string]routerEntry)
@@ -151,7 +170,7 @@ func (ro *Router) Use(pattern string, handle RouteHandler) {
 	patternRegExp := createRegExp(pattern, paramsBound)
 
 	e := routerEntry{
-		handle,
+		handler,
 		pattern,
 		*patternRegExp,
 	}
@@ -161,7 +180,7 @@ func (ro *Router) Use(pattern string, handle RouteHandler) {
 
 func (ro *Router) UseFunc(pattern string, handler func(w http.ResponseWriter, r *Request)) {
 	if handler == nil {
-		panic("http: nil handler")
+		panic("router: nil handler")
 	}
 	ro.Use(pattern, RouteHandlerFunc(handler))
 }

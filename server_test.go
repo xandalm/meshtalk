@@ -402,7 +402,7 @@ func assertStatus(t testing.TB, response *httptest.ResponseRecorder, want int) {
 	t.Helper()
 
 	if response.Code != want {
-		t.Errorf("did not get correct status, got %d but want %d", response.Code, want)
+		t.Fatalf("did not get correct status, got %d but want %d", response.Code, want)
 	}
 }
 
