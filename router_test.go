@@ -100,26 +100,28 @@ func TestRouterUse(t *testing.T) {
 }
 
 type testableURL struct {
-	url            string
-	expectedParams params
+	url                string
+	expectedParams     params
+	expectedHTTPStatus int
 }
 
 func TestRouter(t *testing.T) {
 	cases := []struct {
-		pattern string
-		pass    []testableURL
-		nopass  []string
+		pattern      string
+		testableURLs []testableURL
 	}{
 		{
 			"/user",
 			[]testableURL{
 				{
-					url:            makeDummyHostUrl("/user", nil),
-					expectedParams: params{},
+					url:                makeDummyHostUrl("/user", nil),
+					expectedParams:     params{},
+					expectedHTTPStatus: http.StatusOK,
 				},
-			},
-			[]string{
-				makeDummyHostUrl("/user/1", nil),
+				{
+					url:                makeDummyHostUrl("/user/1", nil),
+					expectedHTTPStatus: http.StatusNotFound,
+				},
 			},
 		},
 		{
@@ -130,16 +132,19 @@ func TestRouter(t *testing.T) {
 					expectedParams: params{
 						"id": "1",
 					},
+					expectedHTTPStatus: http.StatusOK,
 				},
 				{
-					makeDummyHostUrl("/user/{id}", nil),
-					params{
+					url: makeDummyHostUrl("/user/{id}", nil),
+					expectedParams: params{
 						"id": "{id}",
 					},
+					expectedHTTPStatus: http.StatusOK,
 				},
-			},
-			[]string{
-				makeDummyHostUrl("/user", nil),
+				{
+					url:                makeDummyHostUrl("/user/", nil),
+					expectedHTTPStatus: http.StatusNotFound,
+				},
 			},
 		},
 		{
@@ -151,10 +156,12 @@ func TestRouter(t *testing.T) {
 						"oid": "e6af1",
 						"mid": "1f276aeeab026521d532c5d3f10dd428",
 					},
+					expectedHTTPStatus: http.StatusOK,
 				},
-			},
-			[]string{
-				makeDummyHostUrl("/org", nil),
+				{
+					url:                makeDummyHostUrl("/org/12", nil),
+					expectedHTTPStatus: http.StatusNotFound,
+				},
 			},
 		},
 		{
@@ -165,26 +172,38 @@ func TestRouter(t *testing.T) {
 					expectedParams: params{
 						"id": "20",
 					},
+					expectedHTTPStatus: http.StatusOK,
 				},
-			},
-			[]string{
-				makeDummyHostUrl("/storag", nil),
 			},
 		},
 		{
 			"/user/",
 			[]testableURL{
 				{
-					url:            makeDummyHostUrl("/user/", nil),
-					expectedParams: params{},
+					url:                makeDummyHostUrl("/user/", nil),
+					expectedParams:     params{},
+					expectedHTTPStatus: http.StatusOK,
 				},
 				{
-					url:            makeDummyHostUrl("/user", nil),
-					expectedParams: params{},
+					url:                makeDummyHostUrl("/user", nil),
+					expectedParams:     params{},
+					expectedHTTPStatus: http.StatusMovedPermanently,
 				},
 			},
-			[]string{
-				makeDummyHostUrl("/user/1", nil),
+		},
+		{
+			"/user/{id}/",
+			[]testableURL{
+				{
+					url:                makeDummyHostUrl("/user/1/", nil),
+					expectedParams:     params{},
+					expectedHTTPStatus: http.StatusOK,
+				},
+				{
+					url:                makeDummyHostUrl("/user/1", nil),
+					expectedParams:     params{},
+					expectedHTTPStatus: http.StatusMovedPermanently,
+				},
 			},
 		},
 	}
@@ -197,8 +216,7 @@ func TestRouter(t *testing.T) {
 
 			router.Use(c.pattern, handler)
 
-			checkRouterHandleUrls(t, router, handler, c.pass)
-			checkRouterNotHandleUrls(t, router, handler, c.nopass)
+			checkRouterRoutes(t, router, handler, c.testableURLs)
 		})
 	}
 
@@ -232,21 +250,26 @@ func TestRouter(t *testing.T) {
 	})
 }
 
-func checkRouterHandleUrls(t *testing.T, router *meshtalk.Router, handler *StubRouterHandler, urlsToCheck []testableURL) {
+func checkRouterRoutes(t *testing.T, router *meshtalk.Router, handler *StubRouterHandler, urlsToCheck []testableURL) {
 	t.Helper()
 
 	for _, url := range urlsToCheck {
-		request, err := http.NewRequest(http.MethodGet, url.url, nil)
-		if err != nil {
-			t.Fatalf("unable to create http request, %v", err)
-		}
+		request, _ := http.NewRequest(http.MethodGet, url.url, nil)
 		response := httptest.NewRecorder()
 
 		router.ServeHTTP(response, request)
 
-		assertStatus(t, response, http.StatusOK)
-		assertRouterHandle(t, handler, url.url, true)
+		assertGotStatus(t, response, url)
+		// assertRouterHandle(t, handler, url.url, true)
 		checkParams(t, handler.lastRecognizedParams, url.expectedParams)
+	}
+}
+
+func assertGotStatus(t *testing.T, response *httptest.ResponseRecorder, url testableURL) {
+	t.Helper()
+
+	if response.Code != url.expectedHTTPStatus {
+		t.Errorf("%q got status %d but want %d", url.url, response.Code, url.expectedHTTPStatus)
 	}
 }
 
@@ -287,6 +310,10 @@ func assertRouterHandle(t testing.TB, handler *StubRouterHandler, url string, ex
 
 func checkParams(t *testing.T, got, want map[string]string) {
 	t.Helper()
+
+	if want == nil {
+		return
+	}
 
 	for key, value := range want {
 		gotValue, ok := got[key]

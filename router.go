@@ -2,6 +2,7 @@ package meshtalk
 
 import (
 	"net/http"
+	"net/url"
 	"regexp"
 	"strings"
 	"sync"
@@ -21,6 +22,19 @@ type RouteHandlerFunc func(http.ResponseWriter, *Request)
 
 func (f RouteHandlerFunc) ServeHTTP(w http.ResponseWriter, r *Request) {
 	f(w, r)
+}
+
+type redirectHandler struct {
+	url  string
+	code int
+}
+
+func (rh *redirectHandler) ServeHTTP(w http.ResponseWriter, r *Request) {
+	http.Redirect(w, r.Request, rh.url, rh.code)
+}
+
+func RedirectHandler(url string, code int) RouteHandler {
+	return &redirectHandler{url, code}
 }
 
 type Request struct {
@@ -46,6 +60,7 @@ func (ro *Request) Query() map[string]string {
 type Router struct {
 	mu sync.RWMutex
 	m  map[string]routerEntry
+	sm map[string]routerEntry
 }
 
 func NewRouter() *Router { return new(Router) }
@@ -61,7 +76,35 @@ func (ro *Router) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 func (ro *Router) Handler(r *Request) (pattern string, handler RouteHandler) {
 	ro.mu.RLock()
 	defer ro.mu.RUnlock()
-	return ro.match(r)
+
+	p, h := ro.match(r)
+
+	if h == nil {
+
+		slashedPath := r.URL.Path + "/"
+		var u *url.URL
+
+		if _, ok := ro.sm[slashedPath]; ok {
+			u = &url.URL{Path: slashedPath, RawQuery: r.URL.RawQuery}
+		}
+
+		if u == nil {
+			for _, e := range ro.sm {
+				if e.regexp.MatchString(slashedPath) {
+					u = &url.URL{Path: slashedPath, RawQuery: r.URL.RawQuery}
+					break
+				}
+			}
+		}
+
+		if u == nil {
+			return p, NotFoundHandler()
+		}
+
+		return p, RedirectHandler(u.String(), http.StatusMovedPermanently)
+	}
+
+	return p, h
 }
 
 func (ro *Router) match(r *Request) (string, RouteHandler) {
@@ -96,7 +139,7 @@ func (ro *Router) match(r *Request) (string, RouteHandler) {
 		}
 	}
 
-	return "", NotFoundHandler()
+	return "", nil
 }
 
 func NotFoundHandler() RouteHandler {
@@ -109,12 +152,10 @@ func findParamsBound(pattern string) [][]int {
 }
 
 func taggedParam(pattern string, s, e int) string {
-	return `/(?P<` + pattern[(s+2):(e-1)] + `>[^\/]+)`
+	return `/(?P<` + pattern[(s+2):(e-1)] + `>[^/]+)`
 }
 
 func createRegExp(pattern string, paramsBound [][]int) *regexp.Regexp {
-
-	shouldMakeSlashOptional := pattern[len(pattern)-1] == '/'
 
 	if len(paramsBound) > 0 {
 		builder := strings.Builder{}
@@ -127,21 +168,13 @@ func createRegExp(pattern string, paramsBound [][]int) *regexp.Regexp {
 			builder.WriteString(taggedParam(pattern, b[0], b[1]))
 			i = b[1]
 		}
-		if i < (len(pattern) - 1) {
+		if i < len(pattern) {
 			builder.WriteString(pattern[i:])
-		}
-
-		if shouldMakeSlashOptional {
-			builder.WriteRune('?')
 		}
 
 		builder.WriteString("$")
 
 		return regexp.MustCompile(strings.ReplaceAll(builder.String(), "/", `\/`))
-	}
-
-	if shouldMakeSlashOptional {
-		return regexp.MustCompile("^" + strings.ReplaceAll(pattern, "/", `\/`) + "?$")
 	}
 
 	return regexp.MustCompile("^" + strings.ReplaceAll(pattern, "/", `\/`) + "$")
@@ -176,6 +209,18 @@ func (ro *Router) Use(pattern string, handler RouteHandler) {
 	}
 
 	ro.m[pattern] = e
+
+	if pattern[len(pattern)-1] == '/' {
+		ro.registerSlashedEntry(e)
+	}
+}
+
+func (ro *Router) registerSlashedEntry(e routerEntry) {
+	if ro.sm == nil {
+		ro.sm = make(map[string]routerEntry)
+	}
+
+	ro.sm[e.pattern] = e
 }
 
 func (ro *Router) UseFunc(pattern string, handler func(w http.ResponseWriter, r *Request)) {
