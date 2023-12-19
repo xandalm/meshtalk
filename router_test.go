@@ -11,16 +11,21 @@ import (
 )
 
 type StubRouterHandler struct {
-	recognized    []string
-	numberOfCalls int
+	recognized           []string
+	lastRecognizedParams params
+	numberOfCalls        int
 }
 
 func (h *StubRouterHandler) ServeHTTP(w http.ResponseWriter, r *meshtalk.Request) {
 	h.recognized = append(h.recognized, r.URL.String())
+	h.lastRecognizedParams = r.Params()
 	h.numberOfCalls++
 }
 
 type keyValue map[string]string
+
+type params keyValue
+type query keyValue
 
 const dummyHost = "http://dummy.site"
 
@@ -94,17 +99,24 @@ func TestRouterUse(t *testing.T) {
 	})
 }
 
-func TestRouterPatterns(t *testing.T) {
+type testableURL struct {
+	url            string
+	expectedParams params
+}
 
+func TestRouter(t *testing.T) {
 	cases := []struct {
 		pattern string
-		pass    []string
+		pass    []testableURL
 		nopass  []string
 	}{
 		{
 			"/user",
-			[]string{
-				makeDummyHostUrl("/user", nil),
+			[]testableURL{
+				{
+					url:            makeDummyHostUrl("/user", nil),
+					expectedParams: params{},
+				},
 			},
 			[]string{
 				makeDummyHostUrl("/user/1", nil),
@@ -112,9 +124,19 @@ func TestRouterPatterns(t *testing.T) {
 		},
 		{
 			"/user/{id}",
-			[]string{
-				makeDummyHostUrl("/user/1", nil),
-				makeDummyHostUrl("/user/{id}", nil),
+			[]testableURL{
+				{
+					url: makeDummyHostUrl("/user/1", nil),
+					expectedParams: params{
+						"id": "1",
+					},
+				},
+				{
+					makeDummyHostUrl("/user/{id}", nil),
+					params{
+						"id": "{id}",
+					},
+				},
 			},
 			[]string{
 				makeDummyHostUrl("/user", nil),
@@ -122,8 +144,14 @@ func TestRouterPatterns(t *testing.T) {
 		},
 		{
 			"/org/{oid}/member/{mid}",
-			[]string{
-				makeDummyHostUrl("/org/e6af1/member/1f276aeeab026521d532c5d3f10dd428", nil),
+			[]testableURL{
+				{
+					url: makeDummyHostUrl("/org/e6af1/member/1f276aeeab026521d532c5d3f10dd428", nil),
+					expectedParams: params{
+						"oid": "e6af1",
+						"mid": "1f276aeeab026521d532c5d3f10dd428",
+					},
+				},
 			},
 			[]string{
 				makeDummyHostUrl("/org", nil),
@@ -131,8 +159,13 @@ func TestRouterPatterns(t *testing.T) {
 		},
 		{
 			"/storage/{id}",
-			[]string{
-				makeDummyHostUrl("/storage/20", keyValue{"take": "food"}),
+			[]testableURL{
+				{
+					url: makeDummyHostUrl("/storage/20", keyValue{"take": "food"}),
+					expectedParams: params{
+						"id": "20",
+					},
+				},
 			},
 			[]string{
 				makeDummyHostUrl("/storag", nil),
@@ -140,9 +173,15 @@ func TestRouterPatterns(t *testing.T) {
 		},
 		{
 			"/user/",
-			[]string{
-				makeDummyHostUrl("/user/", nil),
-				makeDummyHostUrl("/user", nil),
+			[]testableURL{
+				{
+					url:            makeDummyHostUrl("/user/", nil),
+					expectedParams: params{},
+				},
+				{
+					url:            makeDummyHostUrl("/user", nil),
+					expectedParams: params{},
+				},
 			},
 			[]string{
 				makeDummyHostUrl("/user/1", nil),
@@ -151,7 +190,7 @@ func TestRouterPatterns(t *testing.T) {
 	}
 
 	for _, c := range cases {
-		t.Run(fmt.Sprintf(`adding handle for "%s"`, c.pattern), func(t *testing.T) {
+		t.Run(fmt.Sprintf(`registering router handler for "%s"`, c.pattern), func(t *testing.T) {
 			router := meshtalk.NewRouter()
 
 			handler := &StubRouterHandler{}
@@ -193,67 +232,11 @@ func TestRouterPatterns(t *testing.T) {
 	})
 }
 
-type SpyRequestParams struct {
-	params map[string]string
-}
-
-func TestRouterParams(t *testing.T) {
-
-	cases := []struct {
-		pattern string
-		path    string
-		want    map[string]string
-	}{
-		{
-			"/user/{id}",
-			"/user/1",
-			map[string]string{
-				"id": "1",
-			},
-		},
-		{
-			"/user/{id}",
-			"/user/{id}",
-			map[string]string{
-				"id": "{id}",
-			},
-		},
-		{
-			"/org/{oid}/member/{mid}",
-			"/org/1/member/11",
-			map[string]string{
-				"oid": "1",
-				"mid": "11",
-			},
-		},
-	}
-	var spy *SpyRequestParams
-
-	handler := meshtalk.RouteHandlerFunc(func(w http.ResponseWriter, r *meshtalk.Request) {
-		spy.params = r.Params()
-	})
-
-	spy = &SpyRequestParams{}
-
-	for _, c := range cases {
-		t.Run(fmt.Sprintf("add route to %q, get with path %q", c.pattern, c.path), func(t *testing.T) {
-			router := meshtalk.NewRouter()
-			router.UseFunc(c.pattern, handler)
-			request, _ := http.NewRequest(http.MethodGet, "http://dummy.site"+c.path, nil)
-			response := httptest.NewRecorder()
-
-			router.ServeHTTP(response, request)
-
-			checkParams(t, spy.params, c.want)
-		})
-	}
-}
-
-func checkRouterHandleUrls(t *testing.T, router *meshtalk.Router, handler *StubRouterHandler, urls []string) {
+func checkRouterHandleUrls(t *testing.T, router *meshtalk.Router, handler *StubRouterHandler, urlsToCheck []testableURL) {
 	t.Helper()
 
-	for _, url := range urls {
-		request, err := http.NewRequest(http.MethodGet, url, nil)
+	for _, url := range urlsToCheck {
+		request, err := http.NewRequest(http.MethodGet, url.url, nil)
 		if err != nil {
 			t.Fatalf("unable to create http request, %v", err)
 		}
@@ -261,7 +244,9 @@ func checkRouterHandleUrls(t *testing.T, router *meshtalk.Router, handler *StubR
 
 		router.ServeHTTP(response, request)
 
-		assertRouterHandle(t, handler, url, true)
+		assertStatus(t, response, http.StatusOK)
+		assertRouterHandle(t, handler, url.url, true)
+		checkParams(t, handler.lastRecognizedParams, url.expectedParams)
 	}
 }
 
@@ -292,11 +277,11 @@ func assertRouterHandle(t testing.TB, handler *StubRouterHandler, url string, ex
 		}
 	}
 	if expect && expect != contains {
-		t.Errorf("expected %v to contain %q but it didn't", handler.recognized, url)
+		t.Fatalf("expected %v to contain %q but it didn't", handler.recognized, url)
 		return
 	}
 	if !expect && expect != contains {
-		t.Errorf("expected %v to not contain %q but it did", handler.recognized, url)
+		t.Fatalf("expected %v to not contain %q but it did", handler.recognized, url)
 	}
 }
 
