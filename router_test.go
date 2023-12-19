@@ -16,7 +16,7 @@ type StubRouterHandler struct {
 	numberOfCalls        int
 }
 
-func (h *StubRouterHandler) ServeHTTP(w http.ResponseWriter, r *meshtalk.Request) {
+func (h *StubRouterHandler) ServeHTTP(w meshtalk.ResponseWriter, r *meshtalk.Request) {
 	h.recognized = append(h.recognized, r.URL.String())
 	h.lastRecognizedParams = r.Params()
 	h.numberOfCalls++
@@ -260,7 +260,6 @@ func checkRouterRoutes(t *testing.T, router *meshtalk.Router, handler *StubRoute
 		router.ServeHTTP(response, request)
 
 		assertGotStatus(t, response, url)
-		// assertRouterHandle(t, handler, url.url, true)
 		checkParams(t, handler.lastRecognizedParams, url.expectedParams)
 	}
 }
@@ -270,41 +269,6 @@ func assertGotStatus(t *testing.T, response *httptest.ResponseRecorder, url test
 
 	if response.Code != url.expectedHTTPStatus {
 		t.Errorf("%q got status %d but want %d", url.url, response.Code, url.expectedHTTPStatus)
-	}
-}
-
-func checkRouterNotHandleUrls(t *testing.T, router *meshtalk.Router, handler *StubRouterHandler, urls []string) {
-	t.Helper()
-
-	for _, url := range urls {
-		request, err := http.NewRequest(http.MethodGet, url, nil)
-		if err != nil {
-			t.Fatalf("unable to create http request, %v", err)
-		}
-		response := httptest.NewRecorder()
-
-		router.ServeHTTP(response, request)
-
-		assertRouterHandle(t, handler, url, false)
-	}
-}
-
-func assertRouterHandle(t testing.TB, handler *StubRouterHandler, url string, expect bool) {
-	t.Helper()
-
-	contains := false
-	for _, n := range handler.recognized {
-		if n == url {
-			contains = true
-			break
-		}
-	}
-	if expect && expect != contains {
-		t.Fatalf("expected %v to contain %q but it didn't", handler.recognized, url)
-		return
-	}
-	if !expect && expect != contains {
-		t.Fatalf("expected %v to not contain %q but it did", handler.recognized, url)
 	}
 }
 

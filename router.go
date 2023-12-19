@@ -15,12 +15,12 @@ type routerEntry struct {
 }
 
 type RouteHandler interface {
-	ServeHTTP(http.ResponseWriter, *Request)
+	ServeHTTP(ResponseWriter, *Request)
 }
 
-type RouteHandlerFunc func(http.ResponseWriter, *Request)
+type RouteHandlerFunc func(ResponseWriter, *Request)
 
-func (f RouteHandlerFunc) ServeHTTP(w http.ResponseWriter, r *Request) {
+func (f RouteHandlerFunc) ServeHTTP(w ResponseWriter, r *Request) {
 	f(w, r)
 }
 
@@ -29,13 +29,15 @@ type redirectHandler struct {
 	code int
 }
 
-func (rh *redirectHandler) ServeHTTP(w http.ResponseWriter, r *Request) {
+func (rh *redirectHandler) ServeHTTP(w ResponseWriter, r *Request) {
 	http.Redirect(w, r.Request, rh.url, rh.code)
 }
 
 func RedirectHandler(url string, code int) RouteHandler {
 	return &redirectHandler{url, code}
 }
+
+type ResponseWriter http.ResponseWriter
 
 type Request struct {
 	params map[string]string
@@ -143,7 +145,7 @@ func (ro *Router) match(r *Request) (string, RouteHandler) {
 }
 
 func NotFoundHandler() RouteHandler {
-	return RouteHandlerFunc(func(w http.ResponseWriter, r *Request) { http.Error(w, "404 page not found", http.StatusNotFound) })
+	return RouteHandlerFunc(func(w ResponseWriter, r *Request) { http.Error(w, "404 page not found", http.StatusNotFound) })
 }
 
 func findParamsBound(pattern string) [][]int {
@@ -223,7 +225,7 @@ func (ro *Router) registerSlashedEntry(e routerEntry) {
 	ro.sm[e.pattern] = e
 }
 
-func (ro *Router) UseFunc(pattern string, handler func(w http.ResponseWriter, r *Request)) {
+func (ro *Router) UseFunc(pattern string, handler func(w ResponseWriter, r *Request)) {
 	if handler == nil {
 		panic("router: nil handler")
 	}
