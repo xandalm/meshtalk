@@ -206,10 +206,30 @@ func TestRouter(t *testing.T) {
 				},
 			},
 		},
+		{
+			"/",
+			[]testableURL{
+				{
+					url:                makeDummyHostUrl("", nil),
+					expectedParams:     params{},
+					expectedHTTPStatus: http.StatusOK,
+				},
+			},
+		},
+		{
+			"/br/stores",
+			[]testableURL{
+				{
+					url:                makeDummyHostUrl("/br/./stores", nil),
+					expectedParams:     params{},
+					expectedHTTPStatus: http.StatusOK,
+				},
+			},
+		},
 	}
 
 	for _, c := range cases {
-		t.Run(fmt.Sprintf(`registering router handler for "%s"`, c.pattern), func(t *testing.T) {
+		t.Run(fmt.Sprintf(`registering handler for "%s"`, c.pattern), func(t *testing.T) {
 			router := meshtalk.NewRouter()
 
 			handler := &StubRouterHandler{}

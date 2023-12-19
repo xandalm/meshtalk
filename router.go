@@ -3,6 +3,7 @@ package meshtalk
 import (
 	"net/http"
 	"net/url"
+	"path"
 	"regexp"
 	"strings"
 	"sync"
@@ -71,77 +72,101 @@ func (ro *Router) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 	req := &Request{nil, nil, r}
 
-	_, h := ro.Handler(req)
+	_, h, params := ro.Handler(req)
+	req.params = params
 	h.ServeHTTP(w, req)
 }
 
-func (ro *Router) Handler(r *Request) (pattern string, handler RouteHandler) {
+func cleanPath(p string) string {
+	if p == "" {
+		return "/"
+	}
+
+	if p[0] != '/' {
+		p = "/" + p
+	}
+	np := path.Clean(p)
+
+	if p[len(p)-1] == '/' && np != "/" {
+		if len(p) == len(np)+1 && strings.HasPrefix(p, np) {
+			np = p
+		} else {
+			np += "/"
+		}
+	}
+
+	return np
+}
+
+func (ro *Router) Handler(r *Request) (pattern string, handler RouteHandler, params map[string]string) {
 	ro.mu.RLock()
 	defer ro.mu.RUnlock()
 
-	p, h := ro.match(r)
+	path := r.URL.Path
 
-	if h == nil {
+	path = cleanPath(path)
 
-		slashedPath := r.URL.Path + "/"
-		var u *url.URL
+	p, h, params := ro.match(path)
 
-		if _, ok := ro.sm[slashedPath]; ok {
-			u = &url.URL{Path: slashedPath, RawQuery: r.URL.RawQuery}
-		}
-
-		if u == nil {
-			for _, e := range ro.sm {
-				if e.regexp.MatchString(slashedPath) {
-					u = &url.URL{Path: slashedPath, RawQuery: r.URL.RawQuery}
-					break
-				}
-			}
-		}
-
-		if u == nil {
-			return p, NotFoundHandler()
-		}
-
-		return p, RedirectHandler(u.String(), http.StatusMovedPermanently)
+	if h != nil {
+		return p, h, params
 	}
 
-	return p, h
+	if ro.shouldRedirectToSlashPath(path) {
+		u := &url.URL{Path: path + "/", RawQuery: r.URL.RawQuery}
+		return p, RedirectHandler(u.String(), http.StatusMovedPermanently), nil
+	}
+
+	return p, NotFoundHandler(), nil
 }
 
-func (ro *Router) match(r *Request) (string, RouteHandler) {
+func (ro *Router) shouldRedirectToSlashPath(path string) bool {
+	path = path + "/"
 
-	path := r.URL.Path
+	if _, ok := ro.sm[path]; ok {
+		return true
+	}
+
+	for _, e := range ro.sm {
+		if e.regexp.MatchString(path) {
+			return true
+		}
+	}
+
+	return false
+}
+
+func (ro *Router) match(path string) (string, RouteHandler, map[string]string) {
 
 	// Exatly match
 	e, ok := ro.m[path]
 	if ok && e.regexp.MatchString(path) {
 		matches := e.regexp.FindStringSubmatch(path)
-		r.params = map[string]string{}
+		params := make(map[string]string)
 
 		for i, tag := range e.regexp.SubexpNames() {
 			if i != 0 && tag != "" {
-				r.params[tag] = matches[i]
+				params[tag] = matches[i]
 			}
 		}
-		return e.pattern, e.h
+		return e.pattern, e.h, params
 	}
 
 	for _, e := range ro.m {
 		if e.regexp.MatchString(path) {
 			matches := e.regexp.FindStringSubmatch(path)
-			r.params = map[string]string{}
+			params := make(map[string]string)
 
 			for i, tag := range e.regexp.SubexpNames() {
 				if i != 0 && tag != "" {
-					r.params[tag] = matches[i]
+					params[tag] = matches[i]
 				}
 			}
-			return e.pattern, e.h
+			return e.pattern, e.h, params
 		}
 	}
 
-	return "", nil
+	return "", nil, nil
 }
 
 func NotFoundHandler() RouteHandler {
