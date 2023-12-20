@@ -212,7 +212,7 @@ func TestRouter(t *testing.T) {
 				{
 					url:                makeDummyHostUrl("", nil),
 					expectedParams:     params{},
-					expectedHTTPStatus: http.StatusOK,
+					expectedHTTPStatus: http.StatusMovedPermanently,
 				},
 			},
 		},
@@ -222,7 +222,7 @@ func TestRouter(t *testing.T) {
 				{
 					url:                makeDummyHostUrl("/br/./stores", nil),
 					expectedParams:     params{},
-					expectedHTTPStatus: http.StatusOK,
+					expectedHTTPStatus: http.StatusMovedPermanently,
 				},
 			},
 		},

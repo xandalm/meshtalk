@@ -113,6 +113,12 @@ func (ro *Router) Handler(r *Request) (p string, h RouteHandler, params map[stri
 	}
 
 	if h != nil {
+
+		if path != r.URL.Path {
+			u := &url.URL{Path: path, RawQuery: r.URL.RawQuery}
+			return u.Path, RedirectHandler(u.String(), http.StatusMovedPermanently), nil
+		}
+
 		return
 	}
 
