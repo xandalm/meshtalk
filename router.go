@@ -61,9 +61,10 @@ func (ro *Request) Query() map[string]string {
 }
 
 type Router struct {
-	mu sync.RWMutex
-	m  map[string]routerEntry
-	sm map[string]routerEntry
+	mu   sync.RWMutex
+	m    map[string]routerEntry
+	sm   map[string]routerEntry
+	host bool
 }
 
 func NewRouter() *Router { return new(Router) }
@@ -98,29 +99,35 @@ func cleanPath(p string) string {
 	return np
 }
 
-func (ro *Router) Handler(r *Request) (pattern string, handler RouteHandler, params map[string]string) {
-	ro.mu.RLock()
-	defer ro.mu.RUnlock()
+func (ro *Router) Handler(r *Request) (p string, h RouteHandler, params map[string]string) {
 
-	path := r.URL.Path
+	host := r.URL.Host
+	path := cleanPath(r.URL.Path)
 
-	path = cleanPath(path)
+	if ro.host {
+		p, h, params = ro.match(host + path)
+	}
 
-	p, h, params := ro.match(path)
+	if h == nil {
+		p, h, params = ro.match(path)
+	}
 
 	if h != nil {
-		return p, h, params
+		return
 	}
 
 	if ro.shouldRedirectToSlashPath(path) {
 		u := &url.URL{Path: path + "/", RawQuery: r.URL.RawQuery}
-		return p, RedirectHandler(u.String(), http.StatusMovedPermanently), nil
+		return u.Path, RedirectHandler(u.String(), http.StatusMovedPermanently), nil
 	}
 
 	return p, NotFoundHandler(), nil
 }
 
 func (ro *Router) shouldRedirectToSlashPath(path string) bool {
+	ro.mu.RLock()
+	defer ro.mu.RUnlock()
+
 	path = path + "/"
 
 	if _, ok := ro.sm[path]; ok {
@@ -137,7 +144,8 @@ func (ro *Router) shouldRedirectToSlashPath(path string) bool {
 }
 
 func (ro *Router) match(path string) (string, RouteHandler, map[string]string) {
-
+	ro.mu.RLock()
+	defer ro.mu.RUnlock()
 	// Exatly match
 	e, ok := ro.m[path]
 	if ok && e.regexp.MatchString(path) {
@@ -173,43 +181,27 @@ func NotFoundHandler() RouteHandler {
 	return RouteHandlerFunc(func(w ResponseWriter, r *Request) { http.Error(w, "404 page not found", http.StatusNotFound) })
 }
 
-func findParamsBound(pattern string) [][]int {
-	paramsSeeker := regexp.MustCompile(`\/\{[^\/]+\}`)
-	return paramsSeeker.FindAllStringIndex(pattern, -1)
-}
+func createRegExp(pattern string) *regexp.Regexp {
 
-func taggedParam(pattern string, s, e int) string {
-	return `/(?P<` + pattern[(s+2):(e-1)] + `>[^/]+)`
-}
+	builder := strings.Builder{}
 
-func createRegExp(pattern string, paramsBound [][]int) *regexp.Regexp {
+	builder.WriteRune('^')
 
-	if len(paramsBound) > 0 {
-		builder := strings.Builder{}
+	paramsSeeker := regexp.MustCompile(`(\/\{[^\/]+\})`)
+	builder.WriteString(paramsSeeker.ReplaceAllStringFunc(pattern, func(m string) string {
+		return "/(?P<" + m[2:len(m)-1] + ">[^/]+)"
+	}))
 
-		builder.WriteRune('^')
+	builder.WriteString("$")
 
-		i := 0
-		for _, b := range paramsBound {
-			builder.WriteString(pattern[i:b[0]])
-			builder.WriteString(taggedParam(pattern, b[0], b[1]))
-			i = b[1]
-		}
-		if i < len(pattern) {
-			builder.WriteString(pattern[i:])
-		}
-
-		builder.WriteString("$")
-
-		return regexp.MustCompile(strings.ReplaceAll(builder.String(), "/", `\/`))
-	}
-
-	return regexp.MustCompile("^" + strings.ReplaceAll(pattern, "/", `\/`) + "$")
+	return regexp.MustCompile(strings.ReplaceAll(builder.String(), "/", `\/`))
 }
 
 func (ro *Router) Use(pattern string, handler RouteHandler) {
 	ro.mu.Lock()
 	defer ro.mu.Unlock()
+
+	pattern = regexp.MustCompile(`^https?\:\/\/`).ReplaceAllString(pattern, "")
 
 	if pattern == "" {
 		panic("router: invalid pattern")
@@ -225,9 +217,9 @@ func (ro *Router) Use(pattern string, handler RouteHandler) {
 		ro.m = make(map[string]routerEntry)
 	}
 
-	paramsBound := findParamsBound(pattern)
+	// paramsBound := findParamsBound(pattern)
 
-	patternRegExp := createRegExp(pattern, paramsBound)
+	patternRegExp := createRegExp(pattern /* , paramsBound */)
 
 	e := routerEntry{
 		handler,
@@ -240,6 +232,9 @@ func (ro *Router) Use(pattern string, handler RouteHandler) {
 	if pattern[len(pattern)-1] == '/' {
 		ro.registerSlashedEntry(e)
 	}
+
+	ro.host = pattern[0] != '/'
+
 }
 
 func (ro *Router) registerSlashedEntry(e routerEntry) {

@@ -226,6 +226,16 @@ func TestRouter(t *testing.T) {
 				},
 			},
 		},
+		{
+			makeDummyHostUrl("/users", nil),
+			[]testableURL{
+				{
+					url:                makeDummyHostUrl("/users", nil),
+					expectedParams:     params{},
+					expectedHTTPStatus: http.StatusOK,
+				},
+			},
+		},
 	}
 
 	for _, c := range cases {
