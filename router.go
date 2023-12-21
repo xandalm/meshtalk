@@ -13,6 +13,7 @@ type routerEntry struct {
 	h       RouteHandler
 	pattern string
 	regexp  regexp.Regexp
+	method  string
 }
 
 type RouteHandler interface {
@@ -104,13 +105,7 @@ func (ro *Router) Handler(r *Request) (p string, h RouteHandler, params map[stri
 	host := r.URL.Host
 	path := cleanPath(r.URL.Path)
 
-	if ro.host {
-		p, h, params = ro.match(host + path)
-	}
-
-	if h == nil {
-		p, h, params = ro.match(path)
-	}
+	p, h, params = ro.handler(host, path, r.Method)
 
 	if h != nil {
 
@@ -128,6 +123,32 @@ func (ro *Router) Handler(r *Request) (p string, h RouteHandler, params map[stri
 	}
 
 	return p, NotFoundHandler(), nil
+}
+
+func (ro *Router) handler(host, path, method string) (string, RouteHandler, map[string]string) {
+	var e *routerEntry
+
+	if ro.host {
+		e = ro.match(host + path)
+	}
+
+	if e == nil {
+		e = ro.match(path)
+	}
+
+	if e == nil || (e.method != "" && e.method != method) {
+		return path, nil, nil
+	}
+
+	matches := e.regexp.FindStringSubmatch(path)
+	params := make(map[string]string)
+
+	for i, tag := range e.regexp.SubexpNames() {
+		if i != 0 && tag != "" {
+			params[tag] = matches[i]
+		}
+	}
+	return e.pattern, e.h, params
 }
 
 func (ro *Router) shouldRedirectToSlashPath(path string) bool {
@@ -149,38 +170,22 @@ func (ro *Router) shouldRedirectToSlashPath(path string) bool {
 	return false
 }
 
-func (ro *Router) match(path string) (string, RouteHandler, map[string]string) {
+func (ro *Router) match(path string) *routerEntry {
 	ro.mu.RLock()
 	defer ro.mu.RUnlock()
 	// Exatly match
 	e, ok := ro.m[path]
 	if ok && e.regexp.MatchString(path) {
-		matches := e.regexp.FindStringSubmatch(path)
-		params := make(map[string]string)
-
-		for i, tag := range e.regexp.SubexpNames() {
-			if i != 0 && tag != "" {
-				params[tag] = matches[i]
-			}
-		}
-		return e.pattern, e.h, params
+		return &e
 	}
 
 	for _, e := range ro.m {
 		if e.regexp.MatchString(path) {
-			matches := e.regexp.FindStringSubmatch(path)
-			params := make(map[string]string)
-
-			for i, tag := range e.regexp.SubexpNames() {
-				if i != 0 && tag != "" {
-					params[tag] = matches[i]
-				}
-			}
-			return e.pattern, e.h, params
+			return &e
 		}
 	}
 
-	return "", nil, nil
+	return nil
 }
 
 func NotFoundHandler() RouteHandler {
@@ -203,7 +208,7 @@ func createRegExp(pattern string) *regexp.Regexp {
 	return regexp.MustCompile(strings.ReplaceAll(builder.String(), "/", `\/`))
 }
 
-func (ro *Router) Use(pattern string, handler RouteHandler) {
+func (ro *Router) use(pattern string, handler RouteHandler, method string) {
 	ro.mu.Lock()
 	defer ro.mu.Unlock()
 
@@ -223,14 +228,13 @@ func (ro *Router) Use(pattern string, handler RouteHandler) {
 		ro.m = make(map[string]routerEntry)
 	}
 
-	// paramsBound := findParamsBound(pattern)
-
-	patternRegExp := createRegExp(pattern /* , paramsBound */)
+	patternRegExp := createRegExp(pattern)
 
 	e := routerEntry{
 		handler,
 		pattern,
 		*patternRegExp,
+		method,
 	}
 
 	ro.m[pattern] = e
@@ -251,9 +255,24 @@ func (ro *Router) registerSlashedEntry(e routerEntry) {
 	ro.sm[e.pattern] = e
 }
 
+func (ro *Router) Use(pattern string, handler RouteHandler) {
+	ro.use(pattern, handler, "")
+}
+
 func (ro *Router) UseFunc(pattern string, handler func(w ResponseWriter, r *Request)) {
 	if handler == nil {
 		panic("router: nil handler")
 	}
 	ro.Use(pattern, RouteHandlerFunc(handler))
+}
+
+func (ro *Router) Get(pattern string, handler RouteHandler) {
+	ro.use(pattern, handler, http.MethodGet)
+}
+
+func (ro *Router) GetFunc(pattern string, handler func(w ResponseWriter, r *Request)) {
+	if handler == nil {
+		panic("router: nil handler")
+	}
+	ro.Get(pattern, RouteHandlerFunc(handler))
 }

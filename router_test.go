@@ -25,7 +25,6 @@ func (h *StubRouterHandler) ServeHTTP(w meshtalk.ResponseWriter, r *meshtalk.Req
 type keyValue map[string]string
 
 type params keyValue
-type query keyValue
 
 const dummyHost = "http://dummy.site"
 
@@ -55,26 +54,30 @@ func makeDummyHostUrl(path string, query keyValue) string {
 func TestRouterUse(t *testing.T) {
 	handler := &StubRouterHandler{}
 	router := meshtalk.NewRouter()
-	t.Run("panic if try to register	empty pattern", func(t *testing.T) {
-		defer func() {
-			r := recover()
-			str, ok := r.(string)
-			if !ok || str != "router: invalid pattern" {
-				t.Error(`didn't panic "router: invalid pattern"`)
-			}
-		}()
-		router.Use("", handler)
-	})
-	t.Run("panic if try to register nil handler", func(t *testing.T) {
-		defer func() {
-			r := recover()
-			str, ok := r.(string)
-			if !ok || str != "router: nil handler" {
-				t.Error(`didn't panic "router: nil handler"`)
-			}
-		}()
-		router.Use("/pattern", nil)
-	})
+
+	cases := []struct {
+		desc string
+		p    string
+		h    meshtalk.RouteHandler
+		want string
+	}{
+		{"panic if try to register	empty pattern", "", handler, "router: invalid pattern"},
+		{"panic if try to register nil handler", "/pattern", nil, "router: nil handler"},
+	}
+
+	for _, c := range cases {
+		t.Run(c.desc, func(t *testing.T) {
+			defer func() {
+				r := recover()
+				str, ok := r.(string)
+				if !ok || str != c.want {
+					t.Errorf(`didn't panic %q`, c.want)
+				}
+			}()
+			router.Use(c.p, c.h)
+		})
+	}
+
 	t.Run("panic if try to register pattern again", func(t *testing.T) {
 		defer func() {
 			r := recover()
@@ -97,6 +100,50 @@ func TestRouterUse(t *testing.T) {
 		}()
 		router.UseFunc("/pattern", nil)
 	})
+}
+
+func TestRouterGet(t *testing.T) {
+
+	router := meshtalk.NewRouter()
+	router.Get("/users/{id}", &StubRouterHandler{})
+	tURL := testableURL{
+		makeDummyHostUrl("/users/1", nil),
+		params{"id": "1"},
+		http.StatusOK,
+	}
+
+	t.Run("returns 200 on GET request", func(t *testing.T) {
+
+		request, _ := http.NewRequest(http.MethodGet, tURL.url, nil)
+		response := httptest.NewRecorder()
+
+		router.ServeHTTP(response, request)
+
+		assertGotStatus(t, response, tURL)
+	})
+
+	otherMethodsCases := []string{
+		http.MethodConnect,
+		http.MethodPost,
+		http.MethodPut,
+		http.MethodDelete,
+		http.MethodHead,
+		http.MethodOptions,
+		http.MethodTrace,
+		http.MethodPatch,
+	}
+
+	for _, m := range otherMethodsCases {
+		t.Run(fmt.Sprintf("returns 404 on %s request", m), func(t *testing.T) {
+			request, _ := http.NewRequest(m, tURL.url, nil)
+			response := httptest.NewRecorder()
+
+			router.ServeHTTP(response, request)
+
+			tURL.expectedHTTPStatus = http.StatusNotFound
+			assertGotStatus(t, response, tURL)
+		})
+	}
 }
 
 type testableURL struct {
