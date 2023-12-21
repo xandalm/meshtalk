@@ -440,6 +440,40 @@ func TestRouterDelete(t *testing.T) {
 	}
 }
 
+func TestRequestBody(t *testing.T) {
+	router := meshtalk.NewRouter()
+	handler := meshtalk.RouteHandlerFunc(func(w meshtalk.ResponseWriter, r *meshtalk.Request) {
+		var input struct {
+			Name string
+		}
+		err := r.BodyIn(&input)
+		if err != nil {
+			w.WriteHeader(http.StatusBadRequest)
+			return
+		}
+	})
+	router.Post("/users", handler)
+	url := makeDummyHostUrl("/users", nil)
+
+	t.Run(`parses compatible body`, func(t *testing.T) {
+		request, _ := http.NewRequest(http.MethodPost, url, strings.NewReader(`{"Name": "Alex"}`))
+		response := httptest.NewRecorder()
+
+		router.ServeHTTP(response, request)
+
+		assertGotStatus(t, response, url, http.StatusOK)
+	})
+
+	t.Run(`not parses incompatible body`, func(t *testing.T) {
+		request, _ := http.NewRequest(http.MethodPost, url, strings.NewReader(`[]`))
+		response := httptest.NewRecorder()
+
+		router.ServeHTTP(response, request)
+
+		assertGotStatus(t, response, url, http.StatusBadRequest)
+	})
+}
+
 func checkRouterRoutes(t *testing.T, router *meshtalk.Router, handler *StubRouterHandler, urlsToCheck []testableURL) {
 	t.Helper()
 

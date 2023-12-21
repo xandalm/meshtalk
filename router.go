@@ -1,6 +1,8 @@
 package meshtalk
 
 import (
+	"encoding/json"
+	"fmt"
 	"net/http"
 	"net/url"
 	"path"
@@ -47,18 +49,26 @@ type Request struct {
 	*http.Request
 }
 
-func (ro *Request) Params() map[string]string {
-	if ro.params == nil {
+func (r *Request) Params() map[string]string {
+	if r.params == nil {
 		return make(map[string]string)
 	}
-	return ro.params
+	return r.params
 }
 
-func (ro *Request) Query() map[string]string {
-	if ro.query == nil {
+func (r *Request) Query() map[string]string {
+	if r.query == nil {
 		return make(map[string]string)
 	}
-	return ro.query
+	return r.query
+}
+
+func (r *Request) BodyIn(v any) error {
+	err := json.NewDecoder(r.Body).Decode(v)
+	if err != nil {
+		return fmt.Errorf("router request: body data cannot be put in %T", v)
+	}
+	return nil
 }
 
 type Router struct {
