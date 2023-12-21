@@ -276,3 +276,7 @@ func (ro *Router) GetFunc(pattern string, handler func(w ResponseWriter, r *Requ
 	}
 	ro.Get(pattern, RouteHandlerFunc(handler))
 }
+
+func (ro *Router) Post(pattern string, handler RouteHandler) {
+	ro.use(pattern, handler, http.MethodPost)
+}
