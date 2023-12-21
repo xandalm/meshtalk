@@ -287,20 +287,17 @@ func TestRouterGet(t *testing.T) {
 
 	router := meshtalk.NewRouter()
 	router.Get("/users/{id}", &StubRouterHandler{})
-	tURL := testableURL{
-		makeDummyHostUrl("/users/1", nil),
-		params{"id": "1"},
-		http.StatusOK,
-	}
+
+	url := makeDummyHostUrl("/users/1", nil)
 
 	t.Run("returns 200 on GET request", func(t *testing.T) {
 
-		request, _ := http.NewRequest(http.MethodGet, tURL.url, nil)
+		request, _ := http.NewRequest(http.MethodGet, url, nil)
 		response := httptest.NewRecorder()
 
 		router.ServeHTTP(response, request)
 
-		assertGotStatus(t, response, tURL)
+		assertGotStatus(t, response, url, http.StatusOK)
 	})
 
 	otherMethodsCases := []string{
@@ -316,13 +313,12 @@ func TestRouterGet(t *testing.T) {
 
 	for _, m := range otherMethodsCases {
 		t.Run(fmt.Sprintf("returns 404 on %s request", m), func(t *testing.T) {
-			request, _ := http.NewRequest(m, tURL.url, nil)
+			request, _ := http.NewRequest(m, url, nil)
 			response := httptest.NewRecorder()
 
 			router.ServeHTTP(response, request)
 
-			tURL.expectedHTTPStatus = http.StatusNotFound
-			assertGotStatus(t, response, tURL)
+			assertGotStatus(t, response, url, http.StatusNotFound)
 		})
 	}
 }
@@ -330,20 +326,17 @@ func TestRouterGet(t *testing.T) {
 func TestRouterPost(t *testing.T) {
 	router := meshtalk.NewRouter()
 	router.Post("/users", &StubRouterHandler{})
-	tURL := testableURL{
-		makeDummyHostUrl("/users", nil),
-		params{},
-		http.StatusOK,
-	}
+
+	url := makeDummyHostUrl("/users", nil)
 
 	t.Run("returns 200 on POST request", func(t *testing.T) {
 
-		request, _ := http.NewRequest(http.MethodPost, tURL.url, nil)
+		request, _ := http.NewRequest(http.MethodPost, url, nil)
 		response := httptest.NewRecorder()
 
 		router.ServeHTTP(response, request)
 
-		assertGotStatus(t, response, tURL)
+		assertGotStatus(t, response, url, http.StatusOK)
 	})
 
 	otherMethodsCases := []string{
@@ -359,13 +352,90 @@ func TestRouterPost(t *testing.T) {
 
 	for _, m := range otherMethodsCases {
 		t.Run(fmt.Sprintf("returns 404 on %s request", m), func(t *testing.T) {
-			request, _ := http.NewRequest(m, tURL.url, nil)
+			request, _ := http.NewRequest(m, url, nil)
 			response := httptest.NewRecorder()
 
 			router.ServeHTTP(response, request)
 
-			tURL.expectedHTTPStatus = http.StatusNotFound
-			assertGotStatus(t, response, tURL)
+			assertGotStatus(t, response, url, http.StatusNotFound)
+		})
+	}
+}
+
+func TestRouterPut(t *testing.T) {
+	router := meshtalk.NewRouter()
+	router.Put("/users/{id}", &StubRouterHandler{})
+
+	url := makeDummyHostUrl("/users/1", nil)
+
+	t.Run("returns 200 on POST request", func(t *testing.T) {
+
+		request, _ := http.NewRequest(http.MethodPut, url, nil)
+		response := httptest.NewRecorder()
+
+		router.ServeHTTP(response, request)
+
+		assertGotStatus(t, response, url, http.StatusOK)
+	})
+
+	otherMethodsCases := []string{
+		http.MethodConnect,
+		http.MethodGet,
+		http.MethodPost,
+		http.MethodDelete,
+		http.MethodHead,
+		http.MethodOptions,
+		http.MethodTrace,
+		http.MethodPatch,
+	}
+
+	for _, m := range otherMethodsCases {
+		t.Run(fmt.Sprintf("returns 404 on %s request", m), func(t *testing.T) {
+			request, _ := http.NewRequest(m, url, nil)
+			response := httptest.NewRecorder()
+
+			router.ServeHTTP(response, request)
+
+			assertGotStatus(t, response, url, http.StatusNotFound)
+		})
+	}
+}
+
+func TestRouterDelete(t *testing.T) {
+	router := meshtalk.NewRouter()
+	router.Delete("/users/{id}", &StubRouterHandler{})
+
+	url := makeDummyHostUrl("/users/1", nil)
+
+	t.Run("returns 200 on POST request", func(t *testing.T) {
+
+		request, _ := http.NewRequest(http.MethodDelete, url, nil)
+		response := httptest.NewRecorder()
+
+		router.ServeHTTP(response, request)
+
+		assertGotStatus(t, response, url, http.StatusOK)
+	})
+
+	otherMethodsCases := []string{
+		http.MethodConnect,
+		http.MethodGet,
+		http.MethodPost,
+		http.MethodPut,
+		http.MethodHead,
+		http.MethodOptions,
+		http.MethodTrace,
+		http.MethodPatch,
+	}
+
+	for _, m := range otherMethodsCases {
+		t.Run(fmt.Sprintf("returns 404 on %s request", m), func(t *testing.T) {
+			request, _ := http.NewRequest(m, url, nil)
+			response := httptest.NewRecorder()
+
+			router.ServeHTTP(response, request)
+
+			assertGotStatus(t, response, url, http.StatusNotFound)
 		})
 	}
 }
@@ -379,16 +449,16 @@ func checkRouterRoutes(t *testing.T, router *meshtalk.Router, handler *StubRoute
 
 		router.ServeHTTP(response, request)
 
-		assertGotStatus(t, response, url)
+		assertGotStatus(t, response, url.url, url.expectedHTTPStatus)
 		checkParams(t, handler.lastRecognizedParams, url.expectedParams)
 	}
 }
 
-func assertGotStatus(t *testing.T, response *httptest.ResponseRecorder, url testableURL) {
+func assertGotStatus(t *testing.T, response *httptest.ResponseRecorder, url string, status int) {
 	t.Helper()
 
-	if response.Code != url.expectedHTTPStatus {
-		t.Errorf("%q got status %d but want %d", url.url, response.Code, url.expectedHTTPStatus)
+	if response.Code != status {
+		t.Errorf("%q got status %d but want %d", url, response.Code, status)
 	}
 }
 

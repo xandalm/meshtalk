@@ -280,3 +280,32 @@ func (ro *Router) GetFunc(pattern string, handler func(w ResponseWriter, r *Requ
 func (ro *Router) Post(pattern string, handler RouteHandler) {
 	ro.use(pattern, handler, http.MethodPost)
 }
+
+func (ro *Router) PostFunc(pattern string, handler func(w ResponseWriter, r *Request)) {
+	if handler == nil {
+		panic("router: nil handler")
+	}
+	ro.Post(pattern, RouteHandlerFunc(handler))
+}
+
+func (ro *Router) Put(pattern string, handler RouteHandler) {
+	ro.use(pattern, handler, http.MethodPut)
+}
+
+func (ro *Router) PutFunc(pattern string, handler func(w ResponseWriter, r *Request)) {
+	if handler == nil {
+		panic("router: nil handler")
+	}
+	ro.Put(pattern, RouteHandlerFunc(handler))
+}
+
+func (ro *Router) Delete(pattern string, handler RouteHandler) {
+	ro.use(pattern, handler, http.MethodDelete)
+}
+
+func (ro *Router) DeleteFunc(pattern string, handler func(w ResponseWriter, r *Request)) {
+	if handler == nil {
+		panic("router: nil handler")
+	}
+	ro.Delete(pattern, RouteHandlerFunc(handler))
+}
