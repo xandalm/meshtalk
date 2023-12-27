@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"net/url"
+	"reflect"
 	"strings"
 	"testing"
 )
@@ -441,57 +442,46 @@ func TestRouterDelete(t *testing.T) {
 }
 
 func TestRequestBody(t *testing.T) {
-	router := meshtalk.NewRouter()
-	handler := meshtalk.RouteHandlerFunc(func(w meshtalk.ResponseWriter, r *meshtalk.Request) {
-		var input struct {
-			Name string
-		}
-		err := r.BodyIn(&input)
-		if err != nil {
-			w.WriteHeader(http.StatusBadRequest)
-			return
-		}
-	})
-	router.Post("/users", handler)
-	url := makeDummyHostUrl("/users", nil)
 
-	t.Run(`parses body into struct`, func(t *testing.T) {
-		request, _ := http.NewRequest(http.MethodPost, url, strings.NewReader(`{"Name": "Alex"}`))
-		response := httptest.NewRecorder()
+	cases := []struct {
+		title          string
+		path           string
+		bodyRaw        string
+		into           any
+		expectedStatus int
+		want           any
+	}{
+		{"parses body into struct", "/users", `{"Name": "Alex"}`, new(struct{ Name string }), http.StatusOK, struct{ Name string }{"Alex"}},
+		{"not parses body into struct", "/users", "[]", new(struct{ Name string }), http.StatusBadRequest, struct{ Name string }{}},
+		{"parses body into string", "/fruits", "banana", new(string), http.StatusOK, "banana"},
+		{"parses body into int", "/add", "4", new(int), http.StatusOK, 4},
+	}
 
-		router.ServeHTTP(response, request)
+	for _, c := range cases {
+		t.Run(c.title, func(t *testing.T) {
+			router := meshtalk.NewRouter()
+			handler := meshtalk.RouteHandlerFunc(func(w meshtalk.ResponseWriter, r *meshtalk.Request) {
+				err := r.BodyIn(c.into)
+				if err != nil {
+					w.WriteHeader(http.StatusBadRequest)
+					return
+				}
+			})
+			router.Post(c.path, handler)
+			url := makeDummyHostUrl(c.path, nil)
 
-		assertGotStatus(t, response, url, http.StatusOK)
-	})
+			request, _ := http.NewRequest(http.MethodPost, url, strings.NewReader(c.bodyRaw))
+			response := httptest.NewRecorder()
 
-	t.Run(`not parses body into struct`, func(t *testing.T) {
-		request, _ := http.NewRequest(http.MethodPost, url, strings.NewReader(`[]`))
-		response := httptest.NewRecorder()
+			router.ServeHTTP(response, request)
 
-		router.ServeHTTP(response, request)
-
-		assertGotStatus(t, response, url, http.StatusBadRequest)
-	})
-
-	t.Run("parses body into string", func(t *testing.T) {
-		router.Post("/fruits", meshtalk.RouteHandlerFunc(func(w meshtalk.ResponseWriter, r *meshtalk.Request) {
-			var input string
-			err := r.BodyIn(&input)
-			if err != nil {
-				w.WriteHeader(http.StatusBadRequest)
-				return
+			assertGotStatus(t, response, url, c.expectedStatus)
+			got := reflect.ValueOf(c.into).Elem()
+			if !got.Equal(reflect.ValueOf(c.want)) {
+				t.Errorf("got %#v, want %#v", got, c.want)
 			}
-		}))
-
-		url := makeDummyHostUrl("/fruits", nil)
-
-		request, _ := http.NewRequest(http.MethodPost, url, strings.NewReader("banana"))
-		response := httptest.NewRecorder()
-
-		router.ServeHTTP(response, request)
-
-		assertGotStatus(t, response, url, http.StatusOK)
-	})
+		})
+	}
 }
 
 func checkRouterRoutes(t *testing.T, router *meshtalk.Router, handler *StubRouterHandler, urlsToCheck []testableURL) {

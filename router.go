@@ -65,18 +65,18 @@ func (r *Request) Query() map[string]string {
 }
 
 func (r *Request) BodyIn(v any) error {
-	_, isStringPointer := v.(*string)
+	strptr, isStringPointer := v.(*string)
 	if isStringPointer {
 		data, err := io.ReadAll(r.Body)
 		if err != nil {
-			return fmt.Errorf("router request: body data cannot be put in %T", v)
+			return fmt.Errorf("router: request body: data cannot be put in %T", v)
 		}
-		v = string(data)
+		*strptr = string(data)
 		return nil
 	}
 	err := json.NewDecoder(r.Body).Decode(v)
 	if err != nil {
-		return fmt.Errorf("router request: body data cannot be put in %T", v)
+		return fmt.Errorf("router: request body: data cannot be put in %T", v)
 	}
 	return nil
 }
