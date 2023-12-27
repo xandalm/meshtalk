@@ -203,7 +203,7 @@ func TestRouterPatterns(t *testing.T) {
 		})
 	}
 
-	t.Run(`dintinguish "/users/" and "/users" when both is added`, func(t *testing.T) {
+	t.Run(`distinguish "/users/" and "/users" when both is added`, func(t *testing.T) {
 		router := meshtalk.NewRouter()
 
 		handlerOne := &StubRouterHandler{}
@@ -264,8 +264,8 @@ func TestRouterUse(t *testing.T) {
 		defer func() {
 			r := recover()
 			str, ok := r.(string)
-			if !ok || str != "router: multiple registration for /pattern" {
-				t.Error(`didn't panic "router: multiple registration for /pattern"`)
+			if !ok || str != "router: multiple registration into /pattern" {
+				t.Error(`didn't panic "router: multiple registration into /pattern"`)
 			}
 		}()
 		router.Use("/pattern", handler)
@@ -437,6 +437,68 @@ func TestRouterDelete(t *testing.T) {
 			router.ServeHTTP(response, request)
 
 			assertGotStatus(t, response, url, http.StatusNotFound)
+		})
+	}
+}
+
+func TestMethods(t *testing.T) {
+
+	router := &meshtalk.Router{}
+	path := "/stories"
+
+	createStubHandler := func(method string) meshtalk.RouteHandlerFunc {
+		return meshtalk.RouteHandlerFunc(func(w meshtalk.ResponseWriter, r *meshtalk.Request) {
+			fmt.Fprint(w, method)
+		})
+	}
+
+	t.Run("add handle to generic method", func(t *testing.T) {
+		router.UseFunc(path, createStubHandler("all"))
+
+		reqGet, _ := http.NewRequest(http.MethodGet, makeDummyHostUrl(path, nil), nil)
+		reqPost, _ := http.NewRequest(http.MethodPost, makeDummyHostUrl(path, nil), nil)
+		reqPut, _ := http.NewRequest(http.MethodPut, makeDummyHostUrl(path, nil), nil)
+		reqDelete, _ := http.NewRequest(http.MethodDelete, makeDummyHostUrl(path, nil), nil)
+
+		response := httptest.NewRecorder()
+
+		router.ServeHTTP(response, reqGet)
+		assertStatus(t, response, http.StatusOK)
+
+		router.ServeHTTP(response, reqPost)
+		assertStatus(t, response, http.StatusOK)
+
+		router.ServeHTTP(response, reqPut)
+		assertStatus(t, response, http.StatusOK)
+
+		router.ServeHTTP(response, reqDelete)
+		assertStatus(t, response, http.StatusOK)
+	})
+
+	cases := []struct {
+		method   string
+		routerFn func(string, func(meshtalk.ResponseWriter, *meshtalk.Request))
+	}{
+		{http.MethodGet, router.GetFunc},
+		{http.MethodPost, router.PostFunc},
+		{http.MethodPut, router.PutFunc},
+		{http.MethodDelete, router.DeleteFunc},
+	}
+
+	for _, c := range cases {
+		t.Run("add handle to get method", func(t *testing.T) {
+			c.routerFn(path, createStubHandler(c.method))
+
+			request, _ := http.NewRequest(c.method, makeDummyHostUrl(path, nil), nil)
+			response := httptest.NewRecorder()
+
+			router.ServeHTTP(response, request)
+			assertStatus(t, response, http.StatusOK)
+
+			got := response.Body.String()
+			if got != c.method {
+				t.Errorf("got %s, but want %s", got, c.method)
+			}
 		})
 	}
 }

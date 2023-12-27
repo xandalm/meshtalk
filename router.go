@@ -15,10 +15,9 @@ import (
 )
 
 type routerEntry struct {
-	h       RouteHandler
 	pattern string
 	regexp  regexp.Regexp
-	method  string
+	mh      map[string]RouteHandler
 }
 
 type RouteHandler interface {
@@ -185,8 +184,19 @@ func (ro *Router) handler(host, path, method string) (string, RouteHandler, map[
 		e = ro.match(path)
 	}
 
-	if e == nil || (e.method != "" && e.method != method) {
+	if e == nil {
 		return path, nil, nil
+	}
+
+	var h RouteHandler
+	var hasH bool
+
+	h, hasH = e.mh[method]
+	if !hasH {
+		h, hasH = e.mh["all"]
+		if !hasH {
+			return path, nil, nil
+		}
 	}
 
 	matches := e.regexp.FindStringSubmatch(path)
@@ -197,7 +207,7 @@ func (ro *Router) handler(host, path, method string) (string, RouteHandler, map[
 			params[tag] = matches[i]
 		}
 	}
-	return e.pattern, e.h, params
+	return e.pattern, h, params
 }
 
 func (ro *Router) shouldRedirectToSlashPath(path string) bool {
@@ -269,8 +279,10 @@ func (ro *Router) use(pattern string, handler RouteHandler, method string) {
 	if handler == nil {
 		panic("router: nil handler")
 	}
-	if _, ok := ro.m[pattern]; ok {
-		panic("router: multiple registration for " + pattern)
+	if e, ok := ro.m[pattern]; ok {
+		if _, ok := e.mh[method]; ok {
+			panic("router: multiple registration into " + pattern)
+		}
 	}
 
 	if ro.m == nil {
@@ -280,11 +292,12 @@ func (ro *Router) use(pattern string, handler RouteHandler, method string) {
 	patternRegExp := createRegExp(pattern)
 
 	e := routerEntry{
-		handler,
 		pattern,
 		*patternRegExp,
-		method,
+		make(map[string]RouteHandler),
 	}
+
+	e.mh[method] = handler
 
 	ro.m[pattern] = e
 
@@ -305,7 +318,7 @@ func (ro *Router) registerSlashedEntry(e routerEntry) {
 }
 
 func (ro *Router) Use(pattern string, handler RouteHandler) {
-	ro.use(pattern, handler, "")
+	ro.use(pattern, handler, "all")
 }
 
 func (ro *Router) UseFunc(pattern string, handler func(w ResponseWriter, r *Request)) {
