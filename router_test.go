@@ -478,26 +478,65 @@ func TestMethods(t *testing.T) {
 	cases := []struct {
 		method   string
 		routerFn func(string, func(meshtalk.ResponseWriter, *meshtalk.Request))
+		reqs     map[string]string
 	}{
-		{http.MethodGet, router.GetFunc},
-		{http.MethodPost, router.PostFunc},
-		{http.MethodPut, router.PutFunc},
-		{http.MethodDelete, router.DeleteFunc},
+		{
+			http.MethodGet,
+			router.GetFunc,
+			map[string]string{
+				http.MethodGet:    http.MethodGet,
+				http.MethodPost:   "all",
+				http.MethodPut:    "all",
+				http.MethodDelete: "all",
+			},
+		},
+		{
+			http.MethodPost,
+			router.PostFunc,
+			map[string]string{
+				http.MethodGet:    http.MethodGet,
+				http.MethodPost:   http.MethodPost,
+				http.MethodPut:    "all",
+				http.MethodDelete: "all",
+			},
+		},
+		{
+			http.MethodPut,
+			router.PutFunc,
+			map[string]string{
+				http.MethodGet:    http.MethodGet,
+				http.MethodPost:   http.MethodPost,
+				http.MethodPut:    http.MethodPut,
+				http.MethodDelete: "all",
+			},
+		},
+		{
+			http.MethodDelete,
+			router.DeleteFunc,
+			map[string]string{
+				http.MethodGet:    http.MethodGet,
+				http.MethodPost:   http.MethodPost,
+				http.MethodPut:    http.MethodPut,
+				http.MethodDelete: http.MethodDelete,
+			},
+		},
 	}
 
 	for _, c := range cases {
-		t.Run("add handle to get method", func(t *testing.T) {
+		t.Run(fmt.Sprintf("add handle to %s method", c.method), func(t *testing.T) {
 			c.routerFn(path, createStubHandler(c.method))
 
-			request, _ := http.NewRequest(c.method, makeDummyHostUrl(path, nil), nil)
-			response := httptest.NewRecorder()
+			for method, want := range c.reqs {
+				request, _ := http.NewRequest(method, makeDummyHostUrl(path, nil), nil)
+				response := httptest.NewRecorder()
 
-			router.ServeHTTP(response, request)
-			assertStatus(t, response, http.StatusOK)
+				router.ServeHTTP(response, request)
+				assertStatus(t, response, http.StatusOK)
 
-			got := response.Body.String()
-			if got != c.method {
-				t.Errorf("got %s, but want %s", got, c.method)
+				got := response.Body.String()
+				if got != want {
+					t.Errorf("got %s, but want %s", got, want)
+				}
 			}
 		})
 	}

@@ -279,22 +279,23 @@ func (ro *Router) use(pattern string, handler RouteHandler, method string) {
 	if handler == nil {
 		panic("router: nil handler")
 	}
-	if e, ok := ro.m[pattern]; ok {
-		if _, ok := e.mh[method]; ok {
-			panic("router: multiple registration into " + pattern)
-		}
-	}
 
 	if ro.m == nil {
 		ro.m = make(map[string]routerEntry)
 	}
 
-	patternRegExp := createRegExp(pattern)
-
-	e := routerEntry{
-		pattern,
-		*patternRegExp,
-		make(map[string]RouteHandler),
+	e, ok := ro.m[pattern]
+	if ok {
+		if _, ok := e.mh[method]; ok {
+			panic("router: multiple registration into " + pattern)
+		}
+	} else {
+		patternRegExp := createRegExp(pattern)
+		e = routerEntry{
+			pattern,
+			*patternRegExp,
+			make(map[string]RouteHandler),
+		}
 	}
 
 	e.mh[method] = handler
