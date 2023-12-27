@@ -7,7 +7,9 @@ import (
 	"net/http"
 	"net/url"
 	"path"
+	"reflect"
 	"regexp"
+	"strconv"
 	"strings"
 	"sync"
 )
@@ -64,19 +66,46 @@ func (r *Request) Query() map[string]string {
 	return r.query
 }
 
-func (r *Request) BodyIn(v any) error {
-	strptr, isStringPointer := v.(*string)
-	if isStringPointer {
-		data, err := io.ReadAll(r.Body)
-		if err != nil {
-			return fmt.Errorf("router: request body: data cannot be put in %T", v)
-		}
-		*strptr = string(data)
-		return nil
-	}
-	err := json.NewDecoder(r.Body).Decode(v)
+func bodyParseError(v any) error {
+	return fmt.Errorf("router: parsing body: data cannot be put in %T", v)
+}
+
+func putBodyIntoString(r *Request, v *string) error {
+	data, err := io.ReadAll(r.Body)
 	if err != nil {
-		return fmt.Errorf("router: request body: data cannot be put in %T", v)
+		return bodyParseError(v)
+	}
+	*v = string(data)
+	return nil
+}
+
+func putBodyIntoInt(r *Request, v *int) error {
+	data, err := io.ReadAll(r.Body)
+	if err != nil {
+		return bodyParseError(v)
+	}
+	got, err := strconv.Atoi(string(data))
+	if err != nil {
+		return bodyParseError(v)
+	}
+	*v = got
+	return nil
+}
+
+func (r *Request) BodyIn(v any) error {
+	if reflect.TypeOf(v).Kind() != reflect.Pointer {
+		panic("router: parsing body: v must be pointer")
+	}
+	switch _v := v.(type) {
+	case *string:
+		putBodyIntoString(r, _v)
+	case *int:
+		putBodyIntoInt(r, _v)
+	default:
+		err := json.NewDecoder(r.Body).Decode(v)
+		if err != nil {
+			return bodyParseError(v)
+		}
 	}
 	return nil
 }
