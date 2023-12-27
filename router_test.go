@@ -455,7 +455,7 @@ func TestRequestBody(t *testing.T) {
 	router.Post("/users", handler)
 	url := makeDummyHostUrl("/users", nil)
 
-	t.Run(`parses compatible body`, func(t *testing.T) {
+	t.Run(`parses body into struct`, func(t *testing.T) {
 		request, _ := http.NewRequest(http.MethodPost, url, strings.NewReader(`{"Name": "Alex"}`))
 		response := httptest.NewRecorder()
 
@@ -464,13 +464,33 @@ func TestRequestBody(t *testing.T) {
 		assertGotStatus(t, response, url, http.StatusOK)
 	})
 
-	t.Run(`not parses incompatible body`, func(t *testing.T) {
+	t.Run(`not parses body into struct`, func(t *testing.T) {
 		request, _ := http.NewRequest(http.MethodPost, url, strings.NewReader(`[]`))
 		response := httptest.NewRecorder()
 
 		router.ServeHTTP(response, request)
 
 		assertGotStatus(t, response, url, http.StatusBadRequest)
+	})
+
+	t.Run("parses body into string", func(t *testing.T) {
+		router.Post("/fruits", meshtalk.RouteHandlerFunc(func(w meshtalk.ResponseWriter, r *meshtalk.Request) {
+			var input string
+			err := r.BodyIn(&input)
+			if err != nil {
+				w.WriteHeader(http.StatusBadRequest)
+				return
+			}
+		}))
+
+		url := makeDummyHostUrl("/fruits", nil)
+
+		request, _ := http.NewRequest(http.MethodPost, url, strings.NewReader("banana"))
+		response := httptest.NewRecorder()
+
+		router.ServeHTTP(response, request)
+
+		assertGotStatus(t, response, url, http.StatusOK)
 	})
 }
 
