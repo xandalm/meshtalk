@@ -5,7 +5,6 @@ import (
 	"errors"
 	"io"
 	"net/http"
-	"regexp"
 )
 
 type Storage interface {
@@ -45,10 +44,19 @@ var (
 
 type Server struct {
 	storage Storage
+	router  *Router
 }
 
 func NewServer(storage Storage) *Server {
-	return &Server{storage}
+	s := &Server{storage, &Router{}}
+
+	s.router.GetFunc("/posts/{id}", s.getPostHandler)
+	s.router.PutFunc("/posts/{id}", s.editPostHandler)
+	s.router.DeleteFunc("/posts/{id}", s.deletePostHandler)
+	s.router.GetFunc("/posts", s.getPostHandler)
+	s.router.PostFunc("/posts", s.storePostHandler)
+
+	return s
 }
 
 func (s *Server) writeResponseModel(w http.ResponseWriter, data any, err any) {
@@ -62,25 +70,12 @@ func (s *Server) writeResponseModel(w http.ResponseWriter, data any, err any) {
 }
 
 func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-
-	switch r.Method {
-	case http.MethodPost:
-		s.storePostHandler(w, r)
-	case http.MethodGet:
-		s.getPostHandler(w, r)
-	case http.MethodPut:
-		s.editPostHandler(w, r)
-	case http.MethodDelete:
-		s.deletePostHandler(w, r)
-	default:
-		w.WriteHeader(http.StatusNotImplemented)
-	}
-
+	s.router.ServeHTTP(w, r)
 }
 
-func (s *Server) storePostHandler(w http.ResponseWriter, r *http.Request) {
+func (s *Server) storePostHandler(w ResponseWriter, r *Request) {
 	var post Post
-	err := fromJSON(r.Body, &post)
+	err := r.BodyIn(&post)
 	if err != nil {
 		w.WriteHeader(http.StatusBadRequest)
 		s.writeResponseModel(w, nil, NewError(ErrUnsupportedPostMessage))
@@ -106,16 +101,16 @@ func (s *Server) storePostHandler(w http.ResponseWriter, r *http.Request) {
 	)
 }
 
-func (s *Server) getPostHandler(w http.ResponseWriter, r *http.Request) {
-	postID, _ := s.extractPostIdFromURLPath(r)
+func (s *Server) getPostHandler(w ResponseWriter, r *Request) {
+	postId := r.Params()["id"]
 
-	if postID == "" {
+	if postId == "" {
 		w.WriteHeader(http.StatusOK)
 		s.writeResponseModel(w, s.storage.GetPosts(), nil)
 		return
 	}
 
-	foundPost := s.storage.GetPost(postID)
+	foundPost := s.storage.GetPost(postId)
 
 	if foundPost == nil {
 		w.WriteHeader(http.StatusNotFound)
@@ -125,12 +120,17 @@ func (s *Server) getPostHandler(w http.ResponseWriter, r *http.Request) {
 	s.writeResponseModel(w, *foundPost, nil)
 }
 
-func (s *Server) editPostHandler(w http.ResponseWriter, r *http.Request) {
-	postID, _ := s.extractPostIdFromURLPath(r)
+func (s *Server) editPostHandler(w ResponseWriter, r *Request) {
+	postId := r.Params()["id"]
 
 	var post Post
-	fromJSON(r.Body, &post)
-	post.Id = postID
+	err := r.BodyIn(&post)
+	if err != nil {
+		w.WriteHeader(http.StatusBadRequest)
+		s.writeResponseModel(w, nil, NewError(ErrUnsupportedPostMessage))
+		return
+	}
+	post.Id = postId
 
 	if err := s.storage.EditPost(&post); err != nil {
 
@@ -146,31 +146,15 @@ func (s *Server) editPostHandler(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusNoContent)
 }
 
-func (s *Server) deletePostHandler(w http.ResponseWriter, r *http.Request) {
-	postID, _ := s.extractPostIdFromURLPath(r)
-	if err := s.storage.DeletePost(postID); err != nil {
+func (s *Server) deletePostHandler(w ResponseWriter, r *Request) {
+	postId := r.Params()["id"]
+	if err := s.storage.DeletePost(postId); err != nil {
 		w.WriteHeader(http.StatusInternalServerError)
 		return
 	}
 	w.WriteHeader(http.StatusOK)
 }
 
-func (s *Server) extractPostIdFromURLPath(r *http.Request) (string, error) {
-	specificPostCheck := regexp.MustCompile(`^\/posts(\/(\w*))?$`)
-	if !specificPostCheck.MatchString(r.URL.Path) {
-		return "", errors.New("incompatible url path")
-	}
-	matches := specificPostCheck.FindStringSubmatch(r.URL.Path)
-	if len(matches) > 2 {
-		return matches[2], nil
-	}
-	return "", nil
-}
-
 func toJSON(w io.Writer, s any) error {
 	return json.NewEncoder(w).Encode(s)
-}
-
-func fromJSON(r io.Reader, s any) error {
-	return json.NewDecoder(r).Decode(s)
 }

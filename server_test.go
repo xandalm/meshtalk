@@ -165,7 +165,7 @@ func TestGetPost(t *testing.T) {
 	})
 
 	t.Run("returns all posts", func(t *testing.T) {
-		request, _ := http.NewRequest(http.MethodGet, "/posts/", nil)
+		request, _ := http.NewRequest(http.MethodGet, "/posts", nil)
 		response := httptest.NewRecorder()
 
 		server.ServeHTTP(response, request)
