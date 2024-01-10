@@ -5,6 +5,8 @@ import (
 	"errors"
 	"io"
 	"net/http"
+
+	router "github.com/xandalm/go-router"
 )
 
 type Storage interface {
@@ -44,11 +46,11 @@ var (
 
 type Server struct {
 	storage Storage
-	router  *Router
+	router  *router.Router
 }
 
 func NewServer(storage Storage) *Server {
-	s := &Server{storage, &Router{}}
+	s := &Server{storage, &router.Router{}}
 
 	s.router.GetFunc("/posts/{id}", s.getPostHandler)
 	s.router.PutFunc("/posts/{id}", s.editPostHandler)
@@ -73,9 +75,9 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	s.router.ServeHTTP(w, r)
 }
 
-func (s *Server) storePostHandler(w ResponseWriter, r *Request) {
+func (s *Server) storePostHandler(w router.ResponseWriter, r *router.Request) {
 	var post Post
-	err := r.BodyIn(&post)
+	err := r.ParseBodyInto(&post)
 	if err != nil {
 		w.WriteHeader(http.StatusBadRequest)
 		s.writeResponseModel(w, nil, NewError(ErrUnsupportedPostMessage))
@@ -101,7 +103,7 @@ func (s *Server) storePostHandler(w ResponseWriter, r *Request) {
 	)
 }
 
-func (s *Server) getPostHandler(w ResponseWriter, r *Request) {
+func (s *Server) getPostHandler(w router.ResponseWriter, r *router.Request) {
 	postId := r.Params()["id"]
 
 	if postId == "" {
@@ -120,11 +122,11 @@ func (s *Server) getPostHandler(w ResponseWriter, r *Request) {
 	s.writeResponseModel(w, *foundPost, nil)
 }
 
-func (s *Server) editPostHandler(w ResponseWriter, r *Request) {
+func (s *Server) editPostHandler(w router.ResponseWriter, r *router.Request) {
 	postId := r.Params()["id"]
 
 	var post Post
-	err := r.BodyIn(&post)
+	err := r.ParseBodyInto(&post)
 	if err != nil {
 		w.WriteHeader(http.StatusBadRequest)
 		s.writeResponseModel(w, nil, NewError(ErrUnsupportedPostMessage))
@@ -146,7 +148,7 @@ func (s *Server) editPostHandler(w ResponseWriter, r *Request) {
 	w.WriteHeader(http.StatusNoContent)
 }
 
-func (s *Server) deletePostHandler(w ResponseWriter, r *Request) {
+func (s *Server) deletePostHandler(w router.ResponseWriter, r *router.Request) {
 	postId := r.Params()["id"]
 	if err := s.storage.DeletePost(postId); err != nil {
 		w.WriteHeader(http.StatusInternalServerError)
