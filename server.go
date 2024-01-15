@@ -1,10 +1,12 @@
 package meshtalk
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"io"
 	"net/http"
+	"time"
 
 	router "github.com/xandalm/go-router"
 )
@@ -47,10 +49,15 @@ var (
 type Server struct {
 	storage Storage
 	router  *router.Router
+	to      time.Duration
 }
 
 func NewServer(storage Storage) *Server {
-	s := &Server{storage, &router.Router{}}
+	s := &Server{
+		storage: storage,
+		router:  &router.Router{},
+		to:      time.Minute,
+	}
 
 	s.router.GetFunc("/posts/{id}", s.getPostHandler)
 	s.router.PutFunc("/posts/{id}", s.editPostHandler)
@@ -59,6 +66,14 @@ func NewServer(storage Storage) *Server {
 	s.router.PostFunc("/posts", s.storePostHandler)
 
 	return s
+}
+
+func (s *Server) SetTimeout(duration time.Duration) error {
+	if duration < time.Second {
+		return errors.New("timeout duration must be greater than 1s")
+	}
+	s.to = duration
+	return nil
 }
 
 func (s *Server) writeResponseModel(w http.ResponseWriter, data any, err any) {
@@ -72,7 +87,23 @@ func (s *Server) writeResponseModel(w http.ResponseWriter, data any, err any) {
 }
 
 func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	s.router.ServeHTTP(w, r)
+	ctx, cancel := context.WithCancel(r.Context())
+
+	time.AfterFunc(s.to, cancel)
+	r = r.WithContext(ctx)
+
+	c := make(chan struct{})
+	go func() {
+		s.router.ServeHTTP(w, r)
+		close(c)
+	}()
+
+	select {
+	case <-ctx.Done():
+		w.WriteHeader(http.StatusRequestTimeout)
+	case <-c:
+		return
+	}
 }
 
 func (s *Server) storePostHandler(w router.ResponseWriter, r *router.Request) {

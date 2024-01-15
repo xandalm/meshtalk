@@ -373,6 +373,54 @@ func TestDeletePost(t *testing.T) {
 	})
 }
 
+type MockStorage struct {
+	GetPostFunc    func(id string) *meshtalk.Post
+	GetPostsFunc   func() []meshtalk.Post
+	StorePostFunc  func(post *meshtalk.Post) error
+	EditPostFunc   func(post *meshtalk.Post) error
+	DeletePostFunc func(id string) error
+}
+
+func (s *MockStorage) GetPost(id string) *meshtalk.Post {
+	return s.GetPostFunc(id)
+}
+
+func (s *MockStorage) GetPosts() []meshtalk.Post {
+	return s.GetPostsFunc()
+}
+
+func (s *MockStorage) StorePost(post *meshtalk.Post) error {
+	return s.StorePostFunc(post)
+}
+
+func (s *MockStorage) EditPost(post *meshtalk.Post) error {
+	return s.EditPostFunc(post)
+}
+
+func (s *MockStorage) DeletePost(id string) error {
+	return s.DeletePostFunc(id)
+}
+
+func TestServerTimeout(t *testing.T) {
+	t.Run("returns 408 when reaches server timeout", func(t *testing.T) {
+		storage := &MockStorage{
+			GetPostFunc: func(id string) *meshtalk.Post {
+				time.Sleep(time.Second * 2)
+				return &meshtalk.Post{}
+			},
+		}
+		server := meshtalk.NewServer(storage)
+		server.SetTimeout(time.Second * 1)
+
+		request := newGetPostRequest("1")
+		response := httptest.NewRecorder()
+
+		server.ServeHTTP(response, request)
+
+		assertStatus(t, response, http.StatusRequestTimeout)
+	})
+}
+
 func newDate(year int, month time.Month, day, hour, min, sec, mlsec int) *time.Time {
 	datetime := time.Date(year, month, day, hour, min, sec, mlsec*1e6, time.UTC)
 	return &datetime
