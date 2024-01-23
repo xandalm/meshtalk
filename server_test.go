@@ -17,12 +17,14 @@ import (
 
 type StubStorage struct {
 	posts     map[string]meshtalk.Post
+	comments  map[string]map[string]meshtalk.Comment
 	editCalls []string
 }
 
 func NewStubStorage() *StubStorage {
 	return &StubStorage{
 		map[string]meshtalk.Post{},
+		map[string]map[string]meshtalk.Comment{},
 		[]string{},
 	}
 }
@@ -73,6 +75,18 @@ func (s *StubStorage) DeletePost(id string) error {
 	return nil
 }
 
+func (s *StubStorage) GetComments() []meshtalk.Comment {
+	var res []meshtalk.Comment
+
+	for _, comments := range s.comments {
+		for _, comment := range comments {
+			res = append(res, comment)
+		}
+	}
+
+	return res
+}
+
 type StubFailingStorage struct {
 	posts map[string]meshtalk.Post
 }
@@ -95,6 +109,43 @@ func (s *StubFailingStorage) EditPost(post *meshtalk.Post) error {
 
 func (s *StubFailingStorage) DeletePost(id string) error {
 	return errors.New("some error")
+}
+
+func (s StubFailingStorage) GetComments() []meshtalk.Comment {
+	return nil
+}
+
+type MockStorage struct {
+	GetPostFunc     func(id string) *meshtalk.Post
+	GetPostsFunc    func() []meshtalk.Post
+	StorePostFunc   func(post *meshtalk.Post) error
+	EditPostFunc    func(post *meshtalk.Post) error
+	DeletePostFunc  func(id string) error
+	GetCommentsFunc func() []meshtalk.Comment
+}
+
+func (s *MockStorage) GetPost(id string) *meshtalk.Post {
+	return s.GetPostFunc(id)
+}
+
+func (s *MockStorage) GetPosts() []meshtalk.Post {
+	return s.GetPostsFunc()
+}
+
+func (s *MockStorage) StorePost(post *meshtalk.Post) error {
+	return s.StorePostFunc(post)
+}
+
+func (s *MockStorage) EditPost(post *meshtalk.Post) error {
+	return s.EditPostFunc(post)
+}
+
+func (s *MockStorage) DeletePost(id string) error {
+	return s.DeletePostFunc(id)
+}
+
+func (s *MockStorage) GetComments() []meshtalk.Comment {
+	return s.GetCommentsFunc()
 }
 
 func TestGetPost(t *testing.T) {
@@ -193,10 +244,7 @@ func TestStorePost(t *testing.T) {
 	server := meshtalk.NewServer(storage)
 
 	t.Run(`returns 201 and id equal to "1" on storage`, func(t *testing.T) {
-		request := newStorePostRequest(`{
-"title": "Post X",
-"content": "Post Content",
-"author": "Alex"}`)
+		request := newStorePostRequest(`{"title": "Post X", "content": "Post Content", "author": "Alex"}`)
 		response := httptest.NewRecorder()
 
 		server.ServeHTTP(response, request)
@@ -274,10 +322,7 @@ func TestStorePost(t *testing.T) {
 		storage := &StubFailingStorage{}
 		server := meshtalk.NewServer(storage)
 
-		request := newStorePostRequest(`{
-"title": "Post X",
-"content": "Post Content",
-"author": "Alex"}`)
+		request := newStorePostRequest(`{"title": "Post X", "content": "Post Content", "author": "Alex"}`)
 		response := httptest.NewRecorder()
 
 		server.ServeHTTP(response, request)
@@ -373,32 +418,45 @@ func TestDeletePost(t *testing.T) {
 	})
 }
 
-type MockStorage struct {
-	GetPostFunc    func(id string) *meshtalk.Post
-	GetPostsFunc   func() []meshtalk.Post
-	StorePostFunc  func(post *meshtalk.Post) error
-	EditPostFunc   func(post *meshtalk.Post) error
-	DeletePostFunc func(id string) error
-}
+func TestGetComments(t *testing.T) {
+	storage := &StubStorage{
+		comments: map[string]map[string]meshtalk.Comment{
+			"1": {
+				"1": {
+					Id:        "1",
+					Post:      "1",
+					Content:   "Some comment",
+					Author:    "Alexandre",
+					CreatedAt: newDate(2024, time.January, 23, 12, 30, 30, 100),
+				},
+			},
+		},
+	}
+	server := meshtalk.NewServer(storage)
 
-func (s *MockStorage) GetPost(id string) *meshtalk.Post {
-	return s.GetPostFunc(id)
-}
+	t.Run("returns all comments", func(t *testing.T) {
+		request, _ := http.NewRequest(http.MethodGet, "/comments", nil)
+		response := httptest.NewRecorder()
 
-func (s *MockStorage) GetPosts() []meshtalk.Post {
-	return s.GetPostsFunc()
-}
+		server.ServeHTTP(response, request)
 
-func (s *MockStorage) StorePost(post *meshtalk.Post) error {
-	return s.StorePostFunc(post)
-}
+		assertStatus(t, response, http.StatusOK)
 
-func (s *MockStorage) EditPost(post *meshtalk.Post) error {
-	return s.EditPostFunc(post)
-}
+		responseModel := getResponseModelFromResponse(t, response.Body)
+		data, _ := json.Marshal(responseModel.Data)
 
-func (s *MockStorage) DeletePost(id string) error {
-	return s.DeletePostFunc(id)
+		var got []meshtalk.Comment
+		if err := json.NewDecoder(bytes.NewReader(data)).Decode(&got); err != nil {
+			t.Fatalf("unable to parse data into comments list, %v", err)
+		}
+
+		for _, cs := range storage.comments {
+			for _, c := range cs {
+				assertContains(t, got, c)
+			}
+		}
+	})
+
 }
 
 func TestServerTimeout(t *testing.T) {
@@ -470,7 +528,7 @@ func assertGotError(t testing.TB, got, want meshtalk.Error) {
 	}
 }
 
-func assertContains(t testing.TB, list []meshtalk.Post, needle meshtalk.Post) {
+func assertContains[T any](t testing.TB, list []T, needle T) {
 	t.Helper()
 	contains := false
 	for _, n := range list {
@@ -480,7 +538,7 @@ func assertContains(t testing.TB, list []meshtalk.Post, needle meshtalk.Post) {
 		}
 	}
 	if !contains {
-		t.Errorf("expected %v to contain %q but it didn't", list, needle)
+		t.Errorf("expected %v to contain %v but it didn't", list, needle)
 	}
 }
 

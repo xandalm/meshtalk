@@ -8,12 +8,14 @@ import (
 type InMemoryStorage struct {
 	posts_pk int
 	posts    map[string]Post
+	comments map[string]map[string]Comment
 }
 
 func NewInMemoryStorage() *InMemoryStorage {
 	return &InMemoryStorage{
 		1,
 		map[string]Post{},
+		map[string]map[string]Comment{},
 	}
 }
 
@@ -72,4 +74,14 @@ func (s *InMemoryStorage) EditPost(post *Post) error {
 func (s *InMemoryStorage) DeletePost(id string) error {
 	delete(s.posts, id)
 	return nil
+}
+
+func (s *InMemoryStorage) GetComments() []Comment {
+	var res []Comment
+	for _, comments := range s.comments {
+		for _, comment := range comments {
+			res = append(res, comment)
+		}
+	}
+	return res
 }
