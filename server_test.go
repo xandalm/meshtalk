@@ -75,12 +75,25 @@ func (s *StubStorage) DeletePost(id string) error {
 	return nil
 }
 
-func (s *StubStorage) GetComments() []meshtalk.Comment {
+func (s *StubStorage) GetComments(post string) []meshtalk.Comment {
 	var res []meshtalk.Comment
+	var do func(*[]meshtalk.Comment, *meshtalk.Comment)
+
+	if post != "" {
+		do = func(res *[]meshtalk.Comment, c *meshtalk.Comment) {
+			if post == c.Post {
+				*res = append(*res, *c)
+			}
+		}
+	} else {
+		do = func(res *[]meshtalk.Comment, c *meshtalk.Comment) {
+			*res = append(*res, *c)
+		}
+	}
 
 	for _, comments := range s.comments {
 		for _, comment := range comments {
-			res = append(res, comment)
+			do(&res, &comment)
 		}
 	}
 
@@ -111,7 +124,7 @@ func (s *StubFailingStorage) DeletePost(id string) error {
 	return errors.New("some error")
 }
 
-func (s StubFailingStorage) GetComments() []meshtalk.Comment {
+func (s StubFailingStorage) GetComments(post string) []meshtalk.Comment {
 	return nil
 }
 
@@ -144,7 +157,7 @@ func (s *MockStorage) DeletePost(id string) error {
 	return s.DeletePostFunc(id)
 }
 
-func (s *MockStorage) GetComments() []meshtalk.Comment {
+func (s *MockStorage) GetComments(post string) []meshtalk.Comment {
 	return s.GetCommentsFunc()
 }
 
@@ -429,13 +442,54 @@ func TestGetComments(t *testing.T) {
 					Author:    "Alexandre",
 					CreatedAt: newDate(2024, time.January, 23, 12, 30, 30, 100),
 				},
+				"2": {
+					Id:        "2",
+					Post:      "1",
+					Content:   "Some comment",
+					Author:    "João",
+					CreatedAt: newDate(2024, time.January, 23, 12, 30, 30, 100),
+				},
+			},
+			"2": {
+				"1": {
+					Id:        "1",
+					Post:      "2",
+					Content:   "Some comment",
+					Author:    "Maria",
+					CreatedAt: newDate(2024, time.January, 23, 12, 30, 30, 100),
+				},
 			},
 		},
 	}
 	server := meshtalk.NewServer(storage)
 
+	t.Run("returns comments from post 1", func(t *testing.T) {
+		request := newCommentsRequest("1", "")
+		response := httptest.NewRecorder()
+
+		server.ServeHTTP(response, request)
+
+		assertStatus(t, response, http.StatusOK)
+
+		responseModel := getResponseModelFromResponse(t, response.Body)
+		data, _ := json.Marshal(responseModel.Data)
+
+		var got []meshtalk.Comment
+		if err := json.NewDecoder(bytes.NewReader(data)).Decode(&got); err != nil {
+			t.Fatalf("unable to parse data into comments list, %v", err)
+		}
+
+		for _, c := range storage.comments["1"] {
+			assertContains(t, got, c)
+		}
+
+		if len(got) != len(storage.comments["1"]) {
+			t.Error("got unexpected comment(s)")
+		}
+	})
+
 	t.Run("returns all comments", func(t *testing.T) {
-		request, _ := http.NewRequest(http.MethodGet, "/comments", nil)
+		request := newCommentsRequest("", "")
 		response := httptest.NewRecorder()
 
 		server.ServeHTTP(response, request)
@@ -456,7 +510,6 @@ func TestGetComments(t *testing.T) {
 			}
 		}
 	})
-
 }
 
 func TestServerTimeout(t *testing.T) {
@@ -501,6 +554,18 @@ func newEditPostRequest(id, jsonRaw string) *http.Request {
 
 func newDeletePostRequest(id string) *http.Request {
 	req, _ := http.NewRequest(http.MethodDelete, "/posts/"+id, nil)
+	return req
+}
+
+func newCommentsRequest(postId, commentId string) *http.Request {
+	url := "/comments"
+	if postId != "" {
+		url = url + "?post=" + postId
+		if commentId != "" {
+			url = url + "&id=" + commentId
+		}
+	}
+	req, _ := http.NewRequest(http.MethodGet, url, nil)
 	return req
 }
 

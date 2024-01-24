@@ -17,7 +17,7 @@ type Storage interface {
 	StorePost(post *Post) error
 	EditPost(post *Post) error
 	DeletePost(id string) error
-	GetComments() []Comment
+	GetComments(post string) []Comment
 }
 
 type Error struct {
@@ -192,8 +192,18 @@ func (s *Server) deletePostHandler(w router.ResponseWriter, r *router.Request) {
 }
 
 func (s *Server) getCommentsHandler(w router.ResponseWriter, r *router.Request) {
+	var comments []Comment
+
+	post, hasPost := r.URL.Query()["post"]
+
+	if hasPost {
+		comments = s.storage.GetComments(post[0])
+	} else {
+		comments = s.storage.GetComments("")
+	}
+
 	w.WriteHeader(http.StatusOK)
-	s.writeResponseModel(w, s.storage.GetComments(), nil)
+	s.writeResponseModel(w, comments, nil)
 }
 
 func toJSON(w io.Writer, s any) error {
