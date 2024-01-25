@@ -282,7 +282,7 @@ func TestPOSTPosts(t *testing.T) {
 	storage := NewStubStorage()
 	server := meshtalk.NewServer(storage)
 
-	t.Run(`returns 201 and id equal to "1" on storage`, func(t *testing.T) {
+	t.Run(`returns 201 and after store post`, func(t *testing.T) {
 		request := newStorePostRequest(`{"title": "Post X", "content": "Post Content", "author": "Alex"}`)
 		response := httptest.NewRecorder()
 
@@ -459,6 +459,22 @@ func TestDELETEPosts(t *testing.T) {
 
 func TestGETComments(t *testing.T) {
 	storage := &StubStorage{
+		posts: map[string]meshtalk.Post{
+			"1": {
+				Id:        "1",
+				Title:     "Post 1",
+				Content:   "Post Content",
+				Author:    "Alex",
+				CreatedAt: newDate(2023, time.December, 4, 16, 30, 30, 100),
+			},
+			"2": {
+				Id:        "2",
+				Title:     "Post 2",
+				Content:   "Post Content",
+				Author:    "Andre",
+				CreatedAt: newDate(2023, time.December, 4, 17, 0, 0, 0),
+			},
+		},
 		comments: map[string]map[string]meshtalk.Comment{
 			"1": {
 				"1": {
@@ -491,7 +507,7 @@ func TestGETComments(t *testing.T) {
 
 	t.Run("returns comments from post 1", func(t *testing.T) {
 
-		t.Run("/comments?post=1", func(t *testing.T) {
+		t.Run("for /comments?post=1", func(t *testing.T) {
 			request := newCommentsRequest("1", "")
 			response := httptest.NewRecorder()
 
@@ -510,7 +526,7 @@ func TestGETComments(t *testing.T) {
 			}
 		})
 
-		t.Run("/posts/1/comments", func(t *testing.T) {
+		t.Run("for /posts/1/comments", func(t *testing.T) {
 			request := newPostCommentsRequest("1", "")
 			response := httptest.NewRecorder()
 
@@ -532,7 +548,7 @@ func TestGETComments(t *testing.T) {
 
 	t.Run("returns comment 2 from post 1", func(t *testing.T) {
 
-		t.Run("/comments?post=1&id=2", func(t *testing.T) {
+		t.Run("for /comments?post=1&id=2", func(t *testing.T) {
 			request := newCommentsRequest("1", "2")
 			response := httptest.NewRecorder()
 
@@ -549,7 +565,7 @@ func TestGETComments(t *testing.T) {
 			assertContains(t, got, storage.comments["1"]["2"])
 		})
 
-		t.Run("/posts/1/comments/2", func(t *testing.T) {
+		t.Run("for /posts/1/comments/2", func(t *testing.T) {
 			request := newPostCommentsRequest("1", "2")
 			response := httptest.NewRecorder()
 
@@ -564,6 +580,26 @@ func TestGETComments(t *testing.T) {
 				t.Errorf("got comment %v, but want %v", got, want)
 			}
 		})
+	})
+
+	t.Run("returns 404 when try to get comments from post 3", func(t *testing.T) {
+		request := newPostCommentsRequest("3", "")
+		response := httptest.NewRecorder()
+
+		server.ServeHTTP(response, request)
+
+		assertStatus(t, response, http.StatusNotFound)
+
+	})
+
+	t.Run("returns 404 when try to get comment 3 from post 2", func(t *testing.T) {
+		request := newPostCommentsRequest("2", "3")
+		response := httptest.NewRecorder()
+
+		server.ServeHTTP(response, request)
+
+		assertStatus(t, response, http.StatusNotFound)
+
 	})
 
 	t.Run("returns all comments", func(t *testing.T) {

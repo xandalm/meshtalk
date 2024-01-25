@@ -225,9 +225,20 @@ func (s *Server) getPostCommentsHandler(w router.ResponseWriter, r *router.Reque
 	pid := params["pid"]
 	cid := params["cid"]
 
-	w.WriteHeader(http.StatusOK)
+	post := s.storage.GetPost(pid)
+
+	if post == nil {
+		w.WriteHeader(http.StatusNotFound)
+		return
+	}
+
 	if cid != "" {
-		s.writeResponseModel(w, s.storage.GetComment(pid, cid), nil)
+		comment := s.storage.GetComment(pid, cid)
+		if comment == nil {
+			w.WriteHeader(http.StatusNotFound)
+			return
+		}
+		s.writeResponseModel(w, comment, nil)
 		return
 	}
 	s.writeResponseModel(w, s.storage.GetComments(pid), nil)
