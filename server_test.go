@@ -187,7 +187,7 @@ func (s *MockStorage) GetComment(post, id string) *meshtalk.Comment {
 	return s.GetCommentFunc(post, id)
 }
 
-func TestGetPost(t *testing.T) {
+func TestGETPosts(t *testing.T) {
 	storage := &StubStorage{
 		posts: map[string]meshtalk.Post{
 			"1": {
@@ -278,7 +278,7 @@ func TestGetPost(t *testing.T) {
 	})
 }
 
-func TestStorePost(t *testing.T) {
+func TestPOSTPosts(t *testing.T) {
 	storage := NewStubStorage()
 	server := meshtalk.NewServer(storage)
 
@@ -371,7 +371,7 @@ func TestStorePost(t *testing.T) {
 	})
 }
 
-func TestEditPost(t *testing.T) {
+func TestPUTPosts(t *testing.T) {
 	storage := &StubStorage{
 		posts: map[string]meshtalk.Post{
 			"1": *meshtalk.NewPost("1", "Post 1", "Post Content", "Alex"),
@@ -426,7 +426,7 @@ func TestEditPost(t *testing.T) {
 	})
 }
 
-func TestDeletePost(t *testing.T) {
+func TestDELETEPosts(t *testing.T) {
 	t.Run("returns 200 on post deleted", func(t *testing.T) {
 		storage := &StubStorage{
 			posts: map[string]meshtalk.Post{
@@ -457,7 +457,7 @@ func TestDeletePost(t *testing.T) {
 	})
 }
 
-func TestGetComments(t *testing.T) {
+func TestGETComments(t *testing.T) {
 	storage := &StubStorage{
 		comments: map[string]map[string]meshtalk.Comment{
 			"1": {
@@ -511,7 +511,7 @@ func TestGetComments(t *testing.T) {
 		})
 
 		t.Run("/posts/1/comments", func(t *testing.T) {
-			request, _ := http.NewRequest(http.MethodGet, "/posts/1/comments", nil)
+			request := newPostCommentsRequest("1", "")
 			response := httptest.NewRecorder()
 
 			server.ServeHTTP(response, request)
@@ -550,7 +550,7 @@ func TestGetComments(t *testing.T) {
 		})
 
 		t.Run("/posts/1/comments/2", func(t *testing.T) {
-			request, _ := http.NewRequest(http.MethodGet, "/posts/1/comments/2", nil)
+			request := newPostCommentsRequest("1", "2")
 			response := httptest.NewRecorder()
 
 			server.ServeHTTP(response, request)
@@ -636,6 +636,15 @@ func newCommentsRequest(postId, commentId string) *http.Request {
 		if commentId != "" {
 			url = url + "&id=" + commentId
 		}
+	}
+	req, _ := http.NewRequest(http.MethodGet, url, nil)
+	return req
+}
+
+func newPostCommentsRequest(postId, commentId string) *http.Request {
+	url := "/posts/" + postId + "/comments"
+	if commentId != "" {
+		url += "/" + commentId
 	}
 	req, _ := http.NewRequest(http.MethodGet, url, nil)
 	return req

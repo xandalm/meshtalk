@@ -76,7 +76,7 @@ func (s *InMemoryStorage) DeletePost(id string) error {
 	return nil
 }
 
-func (s *InMemoryStorage) GetComments() []Comment {
+func (s *InMemoryStorage) GetComments(post string) []Comment {
 	var res []Comment
 	for _, comments := range s.comments {
 		for _, comment := range comments {
@@ -84,4 +84,21 @@ func (s *InMemoryStorage) GetComments() []Comment {
 		}
 	}
 	return res
+}
+
+func (s *InMemoryStorage) GetComment(post, id string) *Comment {
+	var found Comment
+	found, ok := s.comments[post][id]
+	if !ok {
+		return nil
+	}
+	return &Comment{
+		Id:        found.Id,
+		Post:      found.Post,
+		Content:   found.Content,
+		Author:    found.Author,
+		CreatedAt: found.CreatedAt,
+		UpdatedAt: found.UpdatedAt,
+		DeletedAt: found.DeletedAt,
+	}
 }
