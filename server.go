@@ -67,6 +67,9 @@ func NewServer(storage Storage) *Server {
 	s.router.GetFunc("/posts", s.getPostHandler)
 	s.router.PostFunc("/posts", s.storePostHandler)
 
+	s.router.GetFunc("/posts/{pid}/comments/{cid}", s.getPostCommentsHandler)
+	s.router.GetFunc("/posts/{pid}/comments", s.getPostCommentsHandler)
+
 	s.router.GetFunc("/comments", s.getCommentsHandler)
 
 	return s
@@ -214,6 +217,20 @@ func (s *Server) getCommentsHandler(w router.ResponseWriter, r *router.Request) 
 	}
 	w.WriteHeader(http.StatusOK)
 	s.writeResponseModel(w, comments, nil)
+}
+
+func (s *Server) getPostCommentsHandler(w router.ResponseWriter, r *router.Request) {
+	params := r.Params()
+
+	pid := params["pid"]
+	cid := params["cid"]
+
+	w.WriteHeader(http.StatusOK)
+	if cid != "" {
+		s.writeResponseModel(w, s.storage.GetComment(pid, cid), nil)
+		return
+	}
+	s.writeResponseModel(w, s.storage.GetComments(pid), nil)
 }
 
 func toJSON(w io.Writer, s any) error {

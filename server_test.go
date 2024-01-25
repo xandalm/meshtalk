@@ -490,39 +490,80 @@ func TestGetComments(t *testing.T) {
 	server := meshtalk.NewServer(storage)
 
 	t.Run("returns comments from post 1", func(t *testing.T) {
-		request := newCommentsRequest("1", "")
-		response := httptest.NewRecorder()
 
-		server.ServeHTTP(response, request)
+		t.Run("/comments?post=1", func(t *testing.T) {
+			request := newCommentsRequest("1", "")
+			response := httptest.NewRecorder()
 
-		assertStatus(t, response, http.StatusOK)
+			server.ServeHTTP(response, request)
 
-		got := getCommentsListFromResponseModel(t, response.Body)
+			assertStatus(t, response, http.StatusOK)
 
-		for _, c := range storage.comments["1"] {
-			assertContains(t, got, c)
-		}
+			got := getCommentsListFromResponseModel(t, response.Body)
 
-		if len(got) != len(storage.comments["1"]) {
-			t.Error("got unexpected comment(s)")
-		}
+			for _, c := range storage.comments["1"] {
+				assertContains(t, got, c)
+			}
+
+			if len(got) != len(storage.comments["1"]) {
+				t.Error("got unexpected comment(s)")
+			}
+		})
+
+		t.Run("/posts/1/comments", func(t *testing.T) {
+			request, _ := http.NewRequest(http.MethodGet, "/posts/1/comments", nil)
+			response := httptest.NewRecorder()
+
+			server.ServeHTTP(response, request)
+
+			assertStatus(t, response, http.StatusOK)
+
+			got := getCommentsListFromResponseModel(t, response.Body)
+
+			for _, c := range storage.comments["1"] {
+				assertContains(t, got, c)
+			}
+
+			if len(got) != len(storage.comments["1"]) {
+				t.Error("got unexpected comment(s)")
+			}
+		})
 	})
 
 	t.Run("returns comment 2 from post 1", func(t *testing.T) {
-		request := newCommentsRequest("1", "2")
-		response := httptest.NewRecorder()
 
-		server.ServeHTTP(response, request)
+		t.Run("/comments?post=1&id=2", func(t *testing.T) {
+			request := newCommentsRequest("1", "2")
+			response := httptest.NewRecorder()
 
-		assertStatus(t, response, http.StatusOK)
+			server.ServeHTTP(response, request)
 
-		got := getCommentsListFromResponseModel(t, response.Body)
+			assertStatus(t, response, http.StatusOK)
 
-		if len(got) > 1 {
-			t.Fatal("expect only one comment, but got more than one")
-		}
+			got := getCommentsListFromResponseModel(t, response.Body)
 
-		assertContains(t, got, storage.comments["1"]["2"])
+			if len(got) > 1 {
+				t.Fatal("expect only one comment, but got more than one")
+			}
+
+			assertContains(t, got, storage.comments["1"]["2"])
+		})
+
+		t.Run("/posts/1/comments/2", func(t *testing.T) {
+			request, _ := http.NewRequest(http.MethodGet, "/posts/1/comments/2", nil)
+			response := httptest.NewRecorder()
+
+			server.ServeHTTP(response, request)
+
+			assertStatus(t, response, http.StatusOK)
+
+			got := getCommentFromResponseModel(t, response.Body)
+			want := storage.comments["1"]["2"]
+
+			if !reflect.DeepEqual(got, want) {
+				t.Errorf("got comment %v, but want %v", got, want)
+			}
+		})
 	})
 
 	t.Run("returns all comments", func(t *testing.T) {
@@ -692,4 +733,18 @@ func getCommentsListFromResponseModel(t *testing.T, body io.Reader) []meshtalk.C
 	}
 
 	return list
+}
+
+func getCommentFromResponseModel(t *testing.T, body io.Reader) meshtalk.Comment {
+	t.Helper()
+
+	responseModel := getResponseModelFromResponse(t, body)
+	data, _ := json.Marshal(responseModel.Data)
+
+	var c meshtalk.Comment
+	if err := json.NewDecoder(bytes.NewReader(data)).Decode(&c); err != nil {
+		t.Fatalf("unable to parse data into comments list, %v", err)
+	}
+
+	return c
 }
