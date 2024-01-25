@@ -100,6 +100,23 @@ func (s *StubStorage) GetComments(post string) []meshtalk.Comment {
 	return res
 }
 
+func (s *StubStorage) GetComment(post, id string) *meshtalk.Comment {
+	var found meshtalk.Comment
+	found, ok := s.comments[post][id]
+	if !ok {
+		return nil
+	}
+	return &meshtalk.Comment{
+		Id:        found.Id,
+		Post:      found.Post,
+		Content:   found.Content,
+		Author:    found.Author,
+		CreatedAt: found.CreatedAt,
+		UpdatedAt: found.UpdatedAt,
+		DeletedAt: found.DeletedAt,
+	}
+}
+
 type StubFailingStorage struct {
 	posts map[string]meshtalk.Post
 }
@@ -124,7 +141,11 @@ func (s *StubFailingStorage) DeletePost(id string) error {
 	return errors.New("some error")
 }
 
-func (s StubFailingStorage) GetComments(post string) []meshtalk.Comment {
+func (s *StubFailingStorage) GetComments(post string) []meshtalk.Comment {
+	return nil
+}
+
+func (s *StubFailingStorage) GetComment(post, id string) *meshtalk.Comment {
 	return nil
 }
 
@@ -134,7 +155,8 @@ type MockStorage struct {
 	StorePostFunc   func(post *meshtalk.Post) error
 	EditPostFunc    func(post *meshtalk.Post) error
 	DeletePostFunc  func(id string) error
-	GetCommentsFunc func() []meshtalk.Comment
+	GetCommentsFunc func(post string) []meshtalk.Comment
+	GetCommentFunc  func(post, id string) *meshtalk.Comment
 }
 
 func (s *MockStorage) GetPost(id string) *meshtalk.Post {
@@ -158,7 +180,11 @@ func (s *MockStorage) DeletePost(id string) error {
 }
 
 func (s *MockStorage) GetComments(post string) []meshtalk.Comment {
-	return s.GetCommentsFunc()
+	return s.GetCommentsFunc(post)
+}
+
+func (s *MockStorage) GetComment(post, id string) *meshtalk.Comment {
+	return s.GetCommentFunc(post, id)
 }
 
 func TestGetPost(t *testing.T) {
@@ -471,13 +497,7 @@ func TestGetComments(t *testing.T) {
 
 		assertStatus(t, response, http.StatusOK)
 
-		responseModel := getResponseModelFromResponse(t, response.Body)
-		data, _ := json.Marshal(responseModel.Data)
-
-		var got []meshtalk.Comment
-		if err := json.NewDecoder(bytes.NewReader(data)).Decode(&got); err != nil {
-			t.Fatalf("unable to parse data into comments list, %v", err)
-		}
+		got := getCommentsListFromResponseModel(t, response.Body)
 
 		for _, c := range storage.comments["1"] {
 			assertContains(t, got, c)
@@ -488,6 +508,23 @@ func TestGetComments(t *testing.T) {
 		}
 	})
 
+	t.Run("returns comment 2 from post 1", func(t *testing.T) {
+		request := newCommentsRequest("1", "2")
+		response := httptest.NewRecorder()
+
+		server.ServeHTTP(response, request)
+
+		assertStatus(t, response, http.StatusOK)
+
+		got := getCommentsListFromResponseModel(t, response.Body)
+
+		if len(got) > 1 {
+			t.Fatal("expect only one comment, but got more than one")
+		}
+
+		assertContains(t, got, storage.comments["1"]["2"])
+	})
+
 	t.Run("returns all comments", func(t *testing.T) {
 		request := newCommentsRequest("", "")
 		response := httptest.NewRecorder()
@@ -496,13 +533,7 @@ func TestGetComments(t *testing.T) {
 
 		assertStatus(t, response, http.StatusOK)
 
-		responseModel := getResponseModelFromResponse(t, response.Body)
-		data, _ := json.Marshal(responseModel.Data)
-
-		var got []meshtalk.Comment
-		if err := json.NewDecoder(bytes.NewReader(data)).Decode(&got); err != nil {
-			t.Fatalf("unable to parse data into comments list, %v", err)
-		}
+		got := getCommentsListFromResponseModel(t, response.Body)
 
 		for _, cs := range storage.comments {
 			for _, c := range cs {
@@ -647,4 +678,18 @@ func getErrorFromResponseModel(t *testing.T, body io.Reader) meshtalk.Error {
 	}
 
 	return responseError
+}
+
+func getCommentsListFromResponseModel(t *testing.T, body io.Reader) []meshtalk.Comment {
+	t.Helper()
+
+	responseModel := getResponseModelFromResponse(t, body)
+	data, _ := json.Marshal(responseModel.Data)
+
+	var list []meshtalk.Comment
+	if err := json.NewDecoder(bytes.NewReader(data)).Decode(&list); err != nil {
+		t.Fatalf("unable to parse data into comments list, %v", err)
+	}
+
+	return list
 }
