@@ -1,15 +1,13 @@
 package meshtalk
 
-import "time"
-
 type Post struct {
-	Id        string     `json:"id"`
-	Title     string     `json:"title"`
-	Content   string     `json:"content"`
-	Author    string     `json:"author"`
-	CreatedAt *time.Time `json:"createdAt"`
-	UpdatedAt *time.Time `json:"updatedAt"`
-	DeletedAt *time.Time `json:"deletedAt"`
+	Id        string `json:"id"`
+	Title     string `json:"title"`
+	Content   string `json:"content"`
+	Author    string `json:"author"`
+	CreatedAt string `json:"createdAt"`
+	UpdatedAt string `json:"updatedAt"`
+	DeletedAt string `json:"deletedAt"`
 }
 
 func NewPost(id, title, content, author string) *Post {

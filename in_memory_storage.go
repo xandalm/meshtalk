@@ -21,7 +21,7 @@ func NewInMemoryStorage() *InMemoryStorage {
 
 func (s *InMemoryStorage) GetPost(id string) *Post {
 	found, ok := s.posts[id]
-	if !ok {
+	if !ok || found.DeletedAt == "" {
 		return nil
 	}
 	return &Post{
@@ -39,16 +39,23 @@ func (s *InMemoryStorage) GetPosts() []Post {
 	posts := make([]Post, 0, len(s.posts))
 
 	for _, p := range s.posts {
-		posts = append(posts, p)
+		if p.DeletedAt == "" {
+			posts = append(posts, p)
+		}
 	}
 
 	return posts
 }
 
+func timeToString(t time.Time) string {
+	b, _ := t.UTC().MarshalText()
+	str := string(b)
+	return str
+}
+
 func (s *InMemoryStorage) StorePost(post *Post) error {
 	post.Id = strconv.Itoa(s.posts_pk)
-	createdAt := time.Now()
-	post.CreatedAt = &createdAt
+	post.CreatedAt = timeToString(time.Now())
 	s.posts[post.Id] = *post
 	s.posts_pk++
 	return nil
@@ -56,23 +63,22 @@ func (s *InMemoryStorage) StorePost(post *Post) error {
 
 func (s *InMemoryStorage) EditPost(post *Post) error {
 	found, ok := s.posts[post.Id]
-	if !ok {
+	if !ok || found.DeletedAt != "" {
 		return ErrPostNotFound
 	}
-	found.Title = post.Title
-	found.Content = post.Content
-	found.Author = post.Author
 
-	updatedAt := time.Now()
-	found.UpdatedAt = &updatedAt
-	post.UpdatedAt = &updatedAt
-
-	s.posts[post.Id] = found
+	post.UpdatedAt = timeToString(time.Now())
+	s.posts[post.Id] = *post
 	return nil
 }
 
 func (s *InMemoryStorage) DeletePost(id string) error {
-	delete(s.posts, id)
+	post, ok := s.posts[id]
+	if !ok {
+		return ErrPostNotFound
+	}
+	post.DeletedAt = timeToString(time.Now())
+	s.posts[id] = post
 	return nil
 }
 
@@ -80,7 +86,9 @@ func (s *InMemoryStorage) GetComments(post string) []Comment {
 	var res []Comment
 	for _, comments := range s.comments {
 		for _, comment := range comments {
-			res = append(res, comment)
+			if comment.DeletedAt != "" {
+				res = append(res, comment)
+			}
 		}
 	}
 	return res
@@ -89,7 +97,7 @@ func (s *InMemoryStorage) GetComments(post string) []Comment {
 func (s *InMemoryStorage) GetComment(post, id string) *Comment {
 	var found Comment
 	found, ok := s.comments[post][id]
-	if !ok {
+	if !ok || found.DeletedAt != "" {
 		return nil
 	}
 	return &Comment{
@@ -101,4 +109,15 @@ func (s *InMemoryStorage) GetComment(post, id string) *Comment {
 		UpdatedAt: found.UpdatedAt,
 		DeletedAt: found.DeletedAt,
 	}
+}
+
+func (s *InMemoryStorage) StoreComment(comment *Comment) error {
+	_, hasComments := s.comments[comment.Post]
+	if !hasComments {
+		s.comments[comment.Post] = make(map[string]Comment)
+	}
+	comment.Id = strconv.Itoa(len(s.comments[comment.Post]) + 1)
+	comment.CreatedAt = timeToString(time.Now())
+	s.comments[comment.Post][comment.Id] = *comment
+	return nil
 }

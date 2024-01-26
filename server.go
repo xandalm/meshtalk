@@ -19,6 +19,7 @@ type Storage interface {
 	DeletePost(id string) error
 	GetComments(post string) []Comment
 	GetComment(post, id string) *Comment
+	StoreComment(comment *Comment) error
 }
 
 type Error struct {
@@ -69,6 +70,7 @@ func NewServer(storage Storage) *Server {
 
 	s.router.GetFunc("/posts/{pid}/comments/{cid}", s.getPostCommentsHandler)
 	s.router.GetFunc("/posts/{pid}/comments", s.getPostCommentsHandler)
+	s.router.PostFunc("/posts/{pid}/comments", s.storePostCommentHandler)
 
 	s.router.GetFunc("/comments", s.getCommentsHandler)
 
@@ -242,6 +244,31 @@ func (s *Server) getPostCommentsHandler(w router.ResponseWriter, r *router.Reque
 		return
 	}
 	s.writeResponseModel(w, s.storage.GetComments(pid), nil)
+}
+
+func (s *Server) storePostCommentHandler(w router.ResponseWriter, r *router.Request) {
+	var comment Comment
+
+	err := r.ParseBodyInto(&comment)
+
+	if err != nil {
+		w.WriteHeader(http.StatusBadRequest)
+		return
+	}
+
+	pid := r.Params()["pid"]
+
+	post := s.storage.GetPost(pid)
+
+	comment.Post = post.Id
+
+	if err := s.storage.StoreComment(&comment); err != nil {
+		w.WriteHeader(http.StatusInternalServerError)
+		return
+	}
+
+	w.WriteHeader(http.StatusCreated)
+	s.writeResponseModel(w, comment, nil)
 }
 
 func toJSON(w io.Writer, s any) error {

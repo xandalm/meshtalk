@@ -55,10 +55,14 @@ func (s *StubStorage) GetPosts() []meshtalk.Post {
 
 func (s *StubStorage) StorePost(post *meshtalk.Post) error {
 	post.Id = strconv.Itoa(len(s.posts) + 1)
-	createdAt := time.Now()
-	post.CreatedAt = &createdAt
+	post.CreatedAt = timeToString(time.Now())
 	s.posts[post.Id] = *post
 	return nil
+}
+
+func timeToString(t time.Time) string {
+	b, _ := time.Now().UTC().MarshalText()
+	return string(b)
 }
 
 func (s *StubStorage) EditPost(post *meshtalk.Post) error {
@@ -117,6 +121,17 @@ func (s *StubStorage) GetComment(post, id string) *meshtalk.Comment {
 	}
 }
 
+func (s *StubStorage) StoreComment(comment *meshtalk.Comment) error {
+	_, hasComments := s.comments[comment.Post]
+	if !hasComments {
+		s.comments[comment.Post] = make(map[string]meshtalk.Comment)
+	}
+	comment.Id = strconv.Itoa(len(s.comments[comment.Post]) + 1)
+	comment.CreatedAt = timeToString(time.Now())
+	s.comments[comment.Post][comment.Id] = *comment
+	return nil
+}
+
 type StubFailingStorage struct {
 	posts map[string]meshtalk.Post
 }
@@ -149,14 +164,19 @@ func (s *StubFailingStorage) GetComment(post, id string) *meshtalk.Comment {
 	return nil
 }
 
+func (s *StubFailingStorage) StoreComment(comment *meshtalk.Comment) error {
+	return errors.New("some error")
+}
+
 type MockStorage struct {
-	GetPostFunc     func(id string) *meshtalk.Post
-	GetPostsFunc    func() []meshtalk.Post
-	StorePostFunc   func(post *meshtalk.Post) error
-	EditPostFunc    func(post *meshtalk.Post) error
-	DeletePostFunc  func(id string) error
-	GetCommentsFunc func(post string) []meshtalk.Comment
-	GetCommentFunc  func(post, id string) *meshtalk.Comment
+	GetPostFunc      func(id string) *meshtalk.Post
+	GetPostsFunc     func() []meshtalk.Post
+	StorePostFunc    func(post *meshtalk.Post) error
+	EditPostFunc     func(post *meshtalk.Post) error
+	DeletePostFunc   func(id string) error
+	GetCommentsFunc  func(post string) []meshtalk.Comment
+	GetCommentFunc   func(post, id string) *meshtalk.Comment
+	StoreCommentFunc func(comment *meshtalk.Comment) error
 }
 
 func (s *MockStorage) GetPost(id string) *meshtalk.Post {
@@ -185,6 +205,10 @@ func (s *MockStorage) GetComments(post string) []meshtalk.Comment {
 
 func (s *MockStorage) GetComment(post, id string) *meshtalk.Comment {
 	return s.GetCommentFunc(post, id)
+}
+
+func (s *MockStorage) StoreComment(comment *meshtalk.Comment) error {
+	return s.StoreCommentFunc(comment)
 }
 
 func TestGETPosts(t *testing.T) {
@@ -282,7 +306,7 @@ func TestPOSTPosts(t *testing.T) {
 	storage := NewStubStorage()
 	server := meshtalk.NewServer(storage)
 
-	t.Run(`returns 201 and after store post`, func(t *testing.T) {
+	t.Run(`returns 201 and post after store post`, func(t *testing.T) {
 		request := newStorePostRequest(`{"title": "Post X", "content": "Post Content", "author": "Alex"}`)
 		response := httptest.NewRecorder()
 
@@ -299,8 +323,8 @@ func TestPOSTPosts(t *testing.T) {
 			Author:  "Alex",
 		}
 
-		if len(storage.posts) != 1 {
-			t.Errorf("expected posts list size to be %d, but got  %d", 1, len(storage.posts))
+		if _, ok := storage.posts["1"]; !ok {
+			t.Fatal("didn't stores the post")
 		}
 
 		if got.Id != want.Id || got.Title != want.Title || got.Content != want.Content || got.Author != want.Author {
@@ -316,11 +340,6 @@ func TestPOSTPosts(t *testing.T) {
 				want.Author,
 			)
 		}
-
-		if got.CreatedAt == nil {
-			t.Errorf("did not get the created datetime, got %q", got.CreatedAt)
-		}
-
 	})
 
 	t.Run("returns 400 when request with incompatible json data", func(t *testing.T) {
@@ -620,6 +639,69 @@ func TestGETComments(t *testing.T) {
 	})
 }
 
+func TestPOSTComments(t *testing.T) {
+	storage := &StubStorage{
+		posts: map[string]meshtalk.Post{
+			"1": {
+				Id:        "1",
+				Title:     "Post 1",
+				Content:   "Post Content",
+				Author:    "Alex",
+				CreatedAt: newDate(2023, time.December, 4, 16, 30, 30, 100),
+			},
+			"2": {
+				Id:        "2",
+				Title:     "Post 2",
+				Content:   "Post Content",
+				Author:    "Andre",
+				CreatedAt: newDate(2023, time.December, 4, 17, 0, 0, 0),
+			},
+		},
+		comments: map[string]map[string]meshtalk.Comment{},
+	}
+	server := meshtalk.NewServer(storage)
+
+	t.Run(`returns 201 and comment after store comment`, func(t *testing.T) {
+		request := newStoreCommentRequest("1", `{"content": "Comment Content", "author": "Alex"}`)
+		response := httptest.NewRecorder()
+
+		server.ServeHTTP(response, request)
+
+		assertStatus(t, response, http.StatusCreated)
+
+		got := getCommentFromResponseModel(t, response.Body)
+		want := meshtalk.Comment{
+			Id:      "1",
+			Post:    "1",
+			Content: "Comment Content",
+			Author:  "Alex",
+		}
+
+		comments, ok := storage.comments["1"]
+		if !ok {
+			t.Fatal("didn't contains any comment into post 1")
+		}
+
+		if _, ok := comments["1"]; !ok {
+			t.Fatal("didn't stores the comment")
+		}
+
+		if got.Id != want.Id || got.Post != want.Post || got.Content != want.Content || got.Author != want.Author {
+			t.Errorf(
+				`did not get expected comment, got {Id="%s", Title="%s", Content="%s", Author="%s"} want {Id="%s", Title="%s", Content="%s", Author="%s"}`,
+				got.Id,
+				got.Post,
+				got.Content,
+				got.Author,
+				want.Id,
+				want.Post,
+				want.Content,
+				want.Author,
+			)
+		}
+	})
+}
+
 func TestServerTimeout(t *testing.T) {
 	t.Run("returns 408 when reaches server timeout", func(t *testing.T) {
 		storage := &MockStorage{
@@ -640,9 +722,10 @@ func TestServerTimeout(t *testing.T) {
 	})
 }
 
-func newDate(year int, month time.Month, day, hour, min, sec, mlsec int) *time.Time {
-	datetime := time.Date(year, month, day, hour, min, sec, mlsec*1e6, time.UTC)
-	return &datetime
+func newDate(year int, month time.Month, day, hour, min, sec, mlsec int) string {
+	d := time.Date(year, month, day, hour, min, sec, mlsec*1e6, time.UTC)
+	b, _ := d.MarshalText()
+	return string(b)
 }
 
 func newGetPostRequest(id string) *http.Request {
@@ -686,6 +769,11 @@ func newPostCommentsRequest(postId, commentId string) *http.Request {
 	return req
 }
 
+func newStoreCommentRequest(post, jsonRaw string) *http.Request {
+	req, _ := http.NewRequest(http.MethodPost, "/posts/"+post+"/comments", strings.NewReader(jsonRaw))
+	return req
+}
+
 func assertStatus(t testing.TB, response *httptest.ResponseRecorder, want int) {
 	t.Helper()
 
@@ -698,7 +786,7 @@ func assertGotPost(t testing.TB, got, want meshtalk.Post) {
 	t.Helper()
 
 	if !reflect.DeepEqual(got, want) {
-		t.Errorf("wrong post received, got %q but want %q", got, want)
+		t.Errorf("wrong post received, got %v but want %v", got, want)
 	}
 }
 
