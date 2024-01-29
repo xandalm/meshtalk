@@ -38,15 +38,19 @@ type ResponseModel struct {
 }
 
 const (
-	ErrPostNotFoundMessage      = "there is no such post here"
-	ErrUnsupportedPostMessage   = "unsupported data to parse into post"
-	ErrMissingPostFieldsMessage = "missing post fields (title, content and author are required)"
+	ErrPostNotFoundMessage         = "there is no such post here"
+	ErrUnsupportedPostMessage      = "unsupported data to parse as post"
+	ErrMissingPostFieldsMessage    = "missing post fields (title, content and author are required)"
+	ErrUnsupportedCommentMessage   = "unsupported data to parse as comment"
+	ErrMissingCommentFieldsMessage = "missing comment fields (content and author are required)"
 )
 
 var (
-	ErrPostNotFound      = errors.New("ERR_POST_NOT_FOUND")
-	ErrUnsupportedPost   = errors.New("ERR_UNSUPPORTED_POST")
-	ErrMissingPostFields = errors.New("ERR_MISSING_POST_FIELDS")
+	ErrPostNotFound         = errors.New("ERR_POST_NOT_FOUND")
+	ErrUnsupportedPost      = errors.New("ERR_UNSUPPORTED_POST")
+	ErrMissingPostFields    = errors.New("ERR_MISSING_POST_FIELDS")
+	ErrUnsupportedComment   = errors.New("ERR_UNSUPPORTED_COMMENT")
+	ErrMissingCommentFields = errors.New("ERR_MISSING_COMMENT_FIELDS")
 )
 
 type Server struct {
@@ -251,14 +255,27 @@ func (s *Server) storePostCommentHandler(w router.ResponseWriter, r *router.Requ
 
 	err := r.ParseBodyInto(&comment)
 
-	if err != nil {
-		w.WriteHeader(http.StatusBadRequest)
-		return
-	}
-
 	pid := r.Params()["pid"]
 
 	post := s.storage.GetPost(pid)
+
+	if post == nil {
+		w.WriteHeader(http.StatusNotFound)
+		s.writeResponseModel(w, nil, NewError(ErrPostNotFoundMessage))
+		return
+	}
+
+	if err != nil {
+		w.WriteHeader(http.StatusBadRequest)
+		s.writeResponseModel(w, nil, NewError(ErrUnsupportedCommentMessage))
+		return
+	}
+
+	if comment.Content == "" || comment.Author == "" {
+		w.WriteHeader(http.StatusBadRequest)
+		s.writeResponseModel(w, nil, NewError(ErrMissingCommentFieldsMessage))
+		return
+	}
 
 	comment.Post = post.Id
 

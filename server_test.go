@@ -700,6 +700,57 @@ func TestPOSTComments(t *testing.T) {
 			)
 		}
 	})
+
+	t.Run("returns 404", func(t *testing.T) {
+		request := newStoreCommentRequest("3", `{"content": "Comment Content", "author": "Alex"}`)
+		response := httptest.NewRecorder()
+
+		server.ServeHTTP(response, request)
+
+		assertStatus(t, response, http.StatusNotFound)
+
+		got := getErrorFromResponseModel(t, response.Body)
+		want := meshtalk.Error{
+			meshtalk.ErrPostNotFoundMessage,
+		}
+
+		assertGotError(t, got, want)
+	})
+
+	t.Run("returns 400", func(t *testing.T) {
+
+		t.Run("unsupported data", func(t *testing.T) {
+			request := newStoreCommentRequest("1", `data`)
+			response := httptest.NewRecorder()
+
+			server.ServeHTTP(response, request)
+
+			assertStatus(t, response, http.StatusBadRequest)
+
+			got := getErrorFromResponseModel(t, response.Body)
+			want := meshtalk.Error{
+				meshtalk.ErrUnsupportedCommentMessage,
+			}
+
+			assertGotError(t, got, want)
+		})
+
+		t.Run("missing fields error", func(t *testing.T) {
+			request := newStoreCommentRequest("1", `{}`)
+			response := httptest.NewRecorder()
+
+			server.ServeHTTP(response, request)
+
+			assertStatus(t, response, http.StatusBadRequest)
+
+			got := getErrorFromResponseModel(t, response.Body)
+			want := meshtalk.Error{
+				meshtalk.ErrMissingCommentFieldsMessage,
+			}
+
+			assertGotError(t, got, want)
+		})
+	})
 }
 
 func TestServerTimeout(t *testing.T) {
