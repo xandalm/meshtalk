@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io"
 	"net/http"
 	"time"
@@ -24,13 +25,19 @@ type Storage interface {
 }
 
 type Error struct {
+	Name    string `json:"name,omitempty"`
 	Message string `json:"message,omitempty"`
 }
 
-func NewError(message string) *Error {
+func NewError(name, message string) *Error {
 	return &Error{
+		Name:    name,
 		Message: message,
 	}
+}
+
+func (e *Error) Error() string {
+	return fmt.Sprintf(`[%s "%s"]`, e.Name, e.Message)
 }
 
 type ResponseModel struct {
@@ -48,12 +55,12 @@ const (
 )
 
 var (
-	ErrPostNotFound         = errors.New("ERR_POST_NOT_FOUND")
-	ErrUnsupportedPost      = errors.New("ERR_UNSUPPORTED_POST")
-	ErrMissingPostFields    = errors.New("ERR_MISSING_POST_FIELDS")
-	ErrUnsupportedComment   = errors.New("ERR_UNSUPPORTED_COMMENT")
-	ErrMissingCommentFields = errors.New("ERR_MISSING_COMMENT_FIELDS")
-	ErrCommentNotFound      = errors.New("ERR_COMMENT_NOT_FOUND")
+	ErrPostNotFound         = NewError("ERR_POST_NOT_FOUND", ErrPostNotFoundMessage)
+	ErrUnsupportedPost      = NewError("ERR_UNSUPPORTED_POST", ErrUnsupportedPostMessage)
+	ErrMissingPostFields    = NewError("ERR_MISSING_POST_FIELDS", ErrMissingPostFieldsMessage)
+	ErrCommentNotFound      = NewError("ERR_COMMENT_NOT_FOUND", ErrCommentNotFoundMessage)
+	ErrUnsupportedComment   = NewError("ERR_UNSUPPORTED_COMMENT", ErrUnsupportedCommentMessage)
+	ErrMissingCommentFields = NewError("ERR_MISSING_COMMENT_FIELDS", ErrMissingCommentFieldsMessage)
 )
 
 type Server struct {
@@ -93,8 +100,22 @@ func (s *Server) SetTimeout(duration time.Duration) error {
 	return nil
 }
 
-func (s *Server) writeResponseModel(w http.ResponseWriter, data any, err any) {
-	toJSON(
+func (s *Server) writeResponse(w http.ResponseWriter, data, err any) {
+	if err != nil {
+		switch err {
+		case ErrPostNotFound,
+			ErrCommentNotFound:
+			w.WriteHeader(http.StatusNotFound)
+		case ErrMissingPostFields,
+			ErrMissingCommentFields,
+			ErrUnsupportedPost,
+			ErrUnsupportedComment:
+			w.WriteHeader(http.StatusBadRequest)
+		default:
+			w.WriteHeader(http.StatusInternalServerError)
+		}
+	}
+	writeJSON(
 		w,
 		ResponseModel{
 			Data:  data,
@@ -127,24 +148,22 @@ func (s *Server) storePostHandler(w router.ResponseWriter, r *router.Request) {
 	var post Post
 	err := r.ParseBodyInto(&post)
 	if err != nil {
-		w.WriteHeader(http.StatusBadRequest)
-		s.writeResponseModel(w, nil, NewError(ErrUnsupportedPostMessage))
+		s.writeResponse(w, nil, ErrUnsupportedPost)
 		return
 	}
 
 	if post.Title == "" || post.Content == "" || post.Author == "" {
-		w.WriteHeader(http.StatusBadRequest)
-		s.writeResponseModel(w, nil, NewError(ErrMissingPostFieldsMessage))
+		s.writeResponse(w, nil, ErrMissingPostFields)
 		return
 	}
 
 	if err := s.storage.StorePost(&post); err != nil {
-		w.WriteHeader(http.StatusInternalServerError)
+		s.writeResponse(w, nil, err)
 		return
 	}
 
 	w.WriteHeader(http.StatusCreated)
-	s.writeResponseModel(
+	s.writeResponse(
 		w,
 		post,
 		nil,
@@ -155,19 +174,17 @@ func (s *Server) getPostHandler(w router.ResponseWriter, r *router.Request) {
 	postId := r.Params()["id"]
 
 	if postId == "" {
-		w.WriteHeader(http.StatusOK)
-		s.writeResponseModel(w, s.storage.GetPosts(), nil)
+		s.writeResponse(w, s.storage.GetPosts(), nil)
 		return
 	}
 
 	foundPost := s.storage.GetPost(postId)
 
 	if foundPost == nil {
-		w.WriteHeader(http.StatusNotFound)
-		s.writeResponseModel(w, nil, NewError(ErrPostNotFoundMessage))
+		s.writeResponse(w, nil, ErrPostNotFound)
 		return
 	}
-	s.writeResponseModel(w, *foundPost, nil)
+	s.writeResponse(w, *foundPost, nil)
 }
 
 func (s *Server) editPostHandler(w router.ResponseWriter, r *router.Request) {
@@ -176,20 +193,13 @@ func (s *Server) editPostHandler(w router.ResponseWriter, r *router.Request) {
 	var post Post
 	err := r.ParseBodyInto(&post)
 	if err != nil {
-		w.WriteHeader(http.StatusBadRequest)
-		s.writeResponseModel(w, nil, NewError(ErrUnsupportedPostMessage))
+		s.writeResponse(w, nil, ErrUnsupportedPost)
 		return
 	}
 	post.Id = postId
 
 	if err := s.storage.EditPost(&post); err != nil {
-
-		if err == ErrPostNotFound {
-			w.WriteHeader(http.StatusNotFound)
-			s.writeResponseModel(w, nil, NewError(ErrPostNotFoundMessage))
-		} else {
-			w.WriteHeader(http.StatusInternalServerError)
-		}
+		s.writeResponse(w, nil, err)
 		return
 	}
 
@@ -199,7 +209,7 @@ func (s *Server) editPostHandler(w router.ResponseWriter, r *router.Request) {
 func (s *Server) deletePostHandler(w router.ResponseWriter, r *router.Request) {
 	postId := r.Params()["id"]
 	if err := s.storage.DeletePost(postId); err != nil {
-		w.WriteHeader(http.StatusInternalServerError)
+		s.writeResponse(w, nil, err)
 		return
 	}
 	w.WriteHeader(http.StatusOK)
@@ -225,8 +235,7 @@ func (s *Server) getCommentsHandler(w router.ResponseWriter, r *router.Request) 
 	} else {
 		comments = s.storage.GetComments("")
 	}
-	w.WriteHeader(http.StatusOK)
-	s.writeResponseModel(w, comments, nil)
+	s.writeResponse(w, comments, nil)
 }
 
 func (s *Server) getPostCommentsHandler(w router.ResponseWriter, r *router.Request) {
@@ -238,22 +247,20 @@ func (s *Server) getPostCommentsHandler(w router.ResponseWriter, r *router.Reque
 	post := s.storage.GetPost(pid)
 
 	if post == nil {
-		w.WriteHeader(http.StatusNotFound)
-		s.writeResponseModel(w, nil, NewError(ErrPostNotFoundMessage))
+		s.writeResponse(w, nil, ErrPostNotFound)
 		return
 	}
 
 	if cid != "" {
 		comment := s.storage.GetComment(pid, cid)
 		if comment == nil {
-			w.WriteHeader(http.StatusNotFound)
-			s.writeResponseModel(w, nil, NewError(ErrCommentNotFoundMessage))
+			s.writeResponse(w, nil, ErrCommentNotFound)
 			return
 		}
-		s.writeResponseModel(w, comment, nil)
+		s.writeResponse(w, comment, nil)
 		return
 	}
-	s.writeResponseModel(w, s.storage.GetComments(pid), nil)
+	s.writeResponse(w, s.storage.GetComments(pid), nil)
 }
 
 func (s *Server) storePostCommentHandler(w router.ResponseWriter, r *router.Request) {
@@ -262,8 +269,7 @@ func (s *Server) storePostCommentHandler(w router.ResponseWriter, r *router.Requ
 	post := s.storage.GetPost(pid)
 
 	if post == nil {
-		w.WriteHeader(http.StatusNotFound)
-		s.writeResponseModel(w, nil, NewError(ErrPostNotFoundMessage))
+		s.writeResponse(w, nil, ErrPostNotFound)
 		return
 	}
 
@@ -271,26 +277,24 @@ func (s *Server) storePostCommentHandler(w router.ResponseWriter, r *router.Requ
 	err := r.ParseBodyInto(&comment)
 
 	if err != nil {
-		w.WriteHeader(http.StatusBadRequest)
-		s.writeResponseModel(w, nil, NewError(ErrUnsupportedCommentMessage))
+		s.writeResponse(w, nil, ErrUnsupportedComment)
 		return
 	}
 
 	if comment.Content == "" || comment.Author == "" {
-		w.WriteHeader(http.StatusBadRequest)
-		s.writeResponseModel(w, nil, NewError(ErrMissingCommentFieldsMessage))
+		s.writeResponse(w, nil, ErrMissingCommentFields)
 		return
 	}
 
 	comment.Post = post.Id
 
 	if err := s.storage.StoreComment(&comment); err != nil {
-		w.WriteHeader(http.StatusInternalServerError)
+		s.writeResponse(w, nil, err)
 		return
 	}
 
 	w.WriteHeader(http.StatusCreated)
-	s.writeResponseModel(w, comment, nil)
+	s.writeResponse(w, comment, nil)
 }
 
 func (s *Server) editPostCommentsHandler(w router.ResponseWriter, r *router.Request) {
@@ -298,7 +302,7 @@ func (s *Server) editPostCommentsHandler(w router.ResponseWriter, r *router.Requ
 
 	var comment Comment
 	if err := r.ParseBodyInto(&comment); err != nil {
-		w.WriteHeader(http.StatusBadRequest)
+		s.writeResponse(w, nil, ErrUnsupportedComment)
 		return
 	}
 
@@ -306,19 +310,13 @@ func (s *Server) editPostCommentsHandler(w router.ResponseWriter, r *router.Requ
 	comment.Id = params["cid"]
 
 	if err := s.storage.EditComment(&comment); err != nil {
-
-		if err == ErrCommentNotFound {
-			w.WriteHeader(http.StatusNotFound)
-			s.writeResponseModel(w, nil, NewError(ErrCommentNotFoundMessage))
-		} else {
-			w.WriteHeader(http.StatusInternalServerError)
-		}
+		s.writeResponse(w, nil, err)
 		return
 	}
 
 	w.WriteHeader(http.StatusNoContent)
 }
 
-func toJSON(w io.Writer, s any) error {
+func writeJSON(w io.Writer, s any) error {
 	return json.NewEncoder(w).Encode(s)
 }

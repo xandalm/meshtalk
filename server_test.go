@@ -298,9 +298,7 @@ func TestGETPosts(t *testing.T) {
 		assertStatus(t, response, http.StatusNotFound)
 
 		got := getErrorFromResponseModel(t, response.Body)
-		want := meshtalk.Error{
-			meshtalk.ErrPostNotFoundMessage,
-		}
+		want := meshtalk.ErrPostNotFound
 
 		assertGotError(t, got, want)
 	})
@@ -380,9 +378,7 @@ func TestPOSTPosts(t *testing.T) {
 			assertStatus(t, response, http.StatusBadRequest)
 
 			got := getErrorFromResponseModel(t, response.Body)
-			want := meshtalk.Error{
-				meshtalk.ErrUnsupportedPostMessage,
-			}
+			want := meshtalk.ErrUnsupportedPost
 
 			assertGotError(t, got, want)
 		})
@@ -395,9 +391,7 @@ func TestPOSTPosts(t *testing.T) {
 			assertStatus(t, response, http.StatusBadRequest)
 
 			got := getErrorFromResponseModel(t, response.Body)
-			want := meshtalk.Error{
-				meshtalk.ErrMissingPostFieldsMessage,
-			}
+			want := meshtalk.ErrMissingPostFields
 
 			assertGotError(t, got, want)
 		})
@@ -449,9 +443,7 @@ func TestPUTPosts(t *testing.T) {
 		assertStatus(t, response, http.StatusNotFound)
 
 		got := getErrorFromResponseModel(t, response.Body)
-		want := meshtalk.Error{
-			meshtalk.ErrPostNotFoundMessage,
-		}
+		want := meshtalk.ErrPostNotFound
 
 		assertGotError(t, got, want)
 	})
@@ -637,9 +629,7 @@ func TestGETComments(t *testing.T) {
 		assertStatus(t, response, http.StatusNotFound)
 
 		got := getErrorFromResponseModel(t, response.Body)
-		want := meshtalk.Error{
-			meshtalk.ErrPostNotFoundMessage,
-		}
+		want := meshtalk.ErrPostNotFound
 
 		assertGotError(t, got, want)
 	})
@@ -653,9 +643,7 @@ func TestGETComments(t *testing.T) {
 		assertStatus(t, response, http.StatusNotFound)
 
 		got := getErrorFromResponseModel(t, response.Body)
-		want := meshtalk.Error{
-			meshtalk.ErrCommentNotFoundMessage,
-		}
+		want := meshtalk.ErrCommentNotFound
 
 		assertGotError(t, got, want)
 	})
@@ -749,9 +737,7 @@ func TestPOSTComments(t *testing.T) {
 		assertStatus(t, response, http.StatusNotFound)
 
 		got := getErrorFromResponseModel(t, response.Body)
-		want := meshtalk.Error{
-			meshtalk.ErrPostNotFoundMessage,
-		}
+		want := meshtalk.ErrPostNotFound
 
 		assertGotError(t, got, want)
 	})
@@ -767,9 +753,7 @@ func TestPOSTComments(t *testing.T) {
 			assertStatus(t, response, http.StatusBadRequest)
 
 			got := getErrorFromResponseModel(t, response.Body)
-			want := meshtalk.Error{
-				meshtalk.ErrUnsupportedCommentMessage,
-			}
+			want := meshtalk.ErrUnsupportedComment
 
 			assertGotError(t, got, want)
 		})
@@ -783,9 +767,7 @@ func TestPOSTComments(t *testing.T) {
 			assertStatus(t, response, http.StatusBadRequest)
 
 			got := getErrorFromResponseModel(t, response.Body)
-			want := meshtalk.Error{
-				meshtalk.ErrMissingCommentFieldsMessage,
-			}
+			want := meshtalk.ErrMissingCommentFields
 
 			assertGotError(t, got, want)
 		})
@@ -846,9 +828,7 @@ func TestPUTComments(t *testing.T) {
 		assertStatus(t, response, http.StatusNotFound)
 
 		got := getErrorFromResponseModel(t, response.Body)
-		want := meshtalk.Error{
-			meshtalk.ErrCommentNotFoundMessage,
-		}
+		want := meshtalk.ErrCommentNotFound
 
 		assertGotError(t, got, want)
 	})
@@ -958,11 +938,11 @@ func assertGotPost(t testing.TB, got, want meshtalk.Post) {
 	}
 }
 
-func assertGotError(t testing.TB, got, want meshtalk.Error) {
+func assertGotError(t testing.TB, got meshtalk.Error, want *meshtalk.Error) {
 	t.Helper()
 
-	if !reflect.DeepEqual(got, want) {
-		t.Errorf("got error %q, but want %q", got, want)
+	if !reflect.DeepEqual(got, *want) {
+		t.Errorf("got error %q, but want %q", got, *want)
 	}
 }
 
