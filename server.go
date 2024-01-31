@@ -20,6 +20,7 @@ type Storage interface {
 	GetComments(post string) []Comment
 	GetComment(post, id string) *Comment
 	StoreComment(comment *Comment) error
+	EditComment(comment *Comment) error
 }
 
 type Error struct {
@@ -43,6 +44,7 @@ const (
 	ErrMissingPostFieldsMessage    = "missing post fields (title, content and author are required)"
 	ErrUnsupportedCommentMessage   = "unsupported data to parse as comment"
 	ErrMissingCommentFieldsMessage = "missing comment fields (content and author are required)"
+	ErrCommentNotFoundMessage      = "there is no such comment here"
 )
 
 var (
@@ -51,6 +53,7 @@ var (
 	ErrMissingPostFields    = errors.New("ERR_MISSING_POST_FIELDS")
 	ErrUnsupportedComment   = errors.New("ERR_UNSUPPORTED_COMMENT")
 	ErrMissingCommentFields = errors.New("ERR_MISSING_COMMENT_FIELDS")
+	ErrCommentNotFound      = errors.New("ERR_COMMENT_NOT_FOUND")
 )
 
 type Server struct {
@@ -73,6 +76,7 @@ func NewServer(storage Storage) *Server {
 	s.router.PostFunc("/posts", s.storePostHandler)
 
 	s.router.GetFunc("/posts/{pid}/comments/{cid}", s.getPostCommentsHandler)
+	s.router.PutFunc("/posts/{pid}/comments/{cid}", s.editPostCommentsHandler)
 	s.router.GetFunc("/posts/{pid}/comments", s.getPostCommentsHandler)
 	s.router.PostFunc("/posts/{pid}/comments", s.storePostCommentHandler)
 
@@ -235,6 +239,7 @@ func (s *Server) getPostCommentsHandler(w router.ResponseWriter, r *router.Reque
 
 	if post == nil {
 		w.WriteHeader(http.StatusNotFound)
+		s.writeResponseModel(w, nil, NewError(ErrPostNotFoundMessage))
 		return
 	}
 
@@ -242,6 +247,7 @@ func (s *Server) getPostCommentsHandler(w router.ResponseWriter, r *router.Reque
 		comment := s.storage.GetComment(pid, cid)
 		if comment == nil {
 			w.WriteHeader(http.StatusNotFound)
+			s.writeResponseModel(w, nil, NewError(ErrCommentNotFoundMessage))
 			return
 		}
 		s.writeResponseModel(w, comment, nil)
@@ -251,10 +257,6 @@ func (s *Server) getPostCommentsHandler(w router.ResponseWriter, r *router.Reque
 }
 
 func (s *Server) storePostCommentHandler(w router.ResponseWriter, r *router.Request) {
-	var comment Comment
-
-	err := r.ParseBodyInto(&comment)
-
 	pid := r.Params()["pid"]
 
 	post := s.storage.GetPost(pid)
@@ -264,6 +266,9 @@ func (s *Server) storePostCommentHandler(w router.ResponseWriter, r *router.Requ
 		s.writeResponseModel(w, nil, NewError(ErrPostNotFoundMessage))
 		return
 	}
+
+	var comment Comment
+	err := r.ParseBodyInto(&comment)
 
 	if err != nil {
 		w.WriteHeader(http.StatusBadRequest)
@@ -286,6 +291,32 @@ func (s *Server) storePostCommentHandler(w router.ResponseWriter, r *router.Requ
 
 	w.WriteHeader(http.StatusCreated)
 	s.writeResponseModel(w, comment, nil)
+}
+
+func (s *Server) editPostCommentsHandler(w router.ResponseWriter, r *router.Request) {
+	params := r.Params()
+
+	var comment Comment
+	if err := r.ParseBodyInto(&comment); err != nil {
+		w.WriteHeader(http.StatusBadRequest)
+		return
+	}
+
+	comment.Post = params["pid"]
+	comment.Id = params["cid"]
+
+	if err := s.storage.EditComment(&comment); err != nil {
+
+		if err == ErrCommentNotFound {
+			w.WriteHeader(http.StatusNotFound)
+			s.writeResponseModel(w, nil, NewError(ErrCommentNotFoundMessage))
+		} else {
+			w.WriteHeader(http.StatusInternalServerError)
+		}
+		return
+	}
+
+	w.WriteHeader(http.StatusNoContent)
 }
 
 func toJSON(w io.Writer, s any) error {

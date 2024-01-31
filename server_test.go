@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io"
 	"meshtalk"
 	"net/http"
@@ -16,15 +17,17 @@ import (
 )
 
 type StubStorage struct {
-	posts     map[string]meshtalk.Post
-	comments  map[string]map[string]meshtalk.Comment
-	editCalls []string
+	posts            map[string]meshtalk.Post
+	comments         map[string]map[string]meshtalk.Comment
+	postEditCalls    []string
+	commentEditCalls []string
 }
 
 func NewStubStorage() *StubStorage {
 	return &StubStorage{
 		map[string]meshtalk.Post{},
 		map[string]map[string]meshtalk.Comment{},
+		[]string{},
 		[]string{},
 	}
 }
@@ -70,7 +73,7 @@ func (s *StubStorage) EditPost(post *meshtalk.Post) error {
 	if !ok {
 		return meshtalk.ErrPostNotFound
 	}
-	s.editCalls = append(s.editCalls, post.Id)
+	s.postEditCalls = append(s.postEditCalls, post.Id)
 	return nil
 }
 
@@ -132,6 +135,21 @@ func (s *StubStorage) StoreComment(comment *meshtalk.Comment) error {
 	return nil
 }
 
+func (s *StubStorage) EditComment(comment *meshtalk.Comment) error {
+	comments, ok := s.comments[comment.Post]
+	if !ok {
+		return meshtalk.ErrCommentNotFound
+	}
+	_, ok = comments[comment.Id]
+	if !ok {
+		return meshtalk.ErrCommentNotFound
+	}
+	s.commentEditCalls = append(s.commentEditCalls, fmt.Sprintf("%+v", comment))
+	return nil
+}
+
+var errFoo = errors.New("some error")
+
 type StubFailingStorage struct {
 	posts map[string]meshtalk.Post
 }
@@ -145,15 +163,15 @@ func (s *StubFailingStorage) GetPosts() []meshtalk.Post {
 }
 
 func (s *StubFailingStorage) StorePost(post *meshtalk.Post) error {
-	return errors.New("some error")
+	return errFoo
 }
 
 func (s *StubFailingStorage) EditPost(post *meshtalk.Post) error {
-	return errors.New("some error")
+	return errFoo
 }
 
 func (s *StubFailingStorage) DeletePost(id string) error {
-	return errors.New("some error")
+	return errFoo
 }
 
 func (s *StubFailingStorage) GetComments(post string) []meshtalk.Comment {
@@ -165,7 +183,11 @@ func (s *StubFailingStorage) GetComment(post, id string) *meshtalk.Comment {
 }
 
 func (s *StubFailingStorage) StoreComment(comment *meshtalk.Comment) error {
-	return errors.New("some error")
+	return errFoo
+}
+
+func (s *StubFailingStorage) EditComment(comment *meshtalk.Comment) error {
+	return errFoo
 }
 
 type MockStorage struct {
@@ -177,6 +199,7 @@ type MockStorage struct {
 	GetCommentsFunc  func(post string) []meshtalk.Comment
 	GetCommentFunc   func(post, id string) *meshtalk.Comment
 	StoreCommentFunc func(comment *meshtalk.Comment) error
+	EditCommentFunc  func(comment *meshtalk.Comment) error
 }
 
 func (s *MockStorage) GetPost(id string) *meshtalk.Post {
@@ -209,6 +232,10 @@ func (s *MockStorage) GetComment(post, id string) *meshtalk.Comment {
 
 func (s *MockStorage) StoreComment(comment *meshtalk.Comment) error {
 	return s.StoreCommentFunc(comment)
+}
+
+func (s *MockStorage) EditComment(comment *meshtalk.Comment) error {
+	return s.EditCommentFunc(comment)
 }
 
 func TestGETPosts(t *testing.T) {
@@ -408,7 +435,7 @@ func TestPUTPosts(t *testing.T) {
 
 		assertStatus(t, response, http.StatusNoContent)
 
-		if len(storage.editCalls) != 1 {
+		if len(storage.postEditCalls) != 1 {
 			t.Error("did not edited the post")
 		}
 	})
@@ -527,7 +554,7 @@ func TestGETComments(t *testing.T) {
 	t.Run("returns comments from post 1", func(t *testing.T) {
 
 		t.Run("for /comments?post=1", func(t *testing.T) {
-			request := newCommentsRequest("1", "")
+			request := newGetCommentsRequest("1", "")
 			response := httptest.NewRecorder()
 
 			server.ServeHTTP(response, request)
@@ -546,7 +573,7 @@ func TestGETComments(t *testing.T) {
 		})
 
 		t.Run("for /posts/1/comments", func(t *testing.T) {
-			request := newPostCommentsRequest("1", "")
+			request := newGetPostCommentsRequest("1", "")
 			response := httptest.NewRecorder()
 
 			server.ServeHTTP(response, request)
@@ -568,7 +595,7 @@ func TestGETComments(t *testing.T) {
 	t.Run("returns comment 2 from post 1", func(t *testing.T) {
 
 		t.Run("for /comments?post=1&id=2", func(t *testing.T) {
-			request := newCommentsRequest("1", "2")
+			request := newGetCommentsRequest("1", "2")
 			response := httptest.NewRecorder()
 
 			server.ServeHTTP(response, request)
@@ -585,7 +612,7 @@ func TestGETComments(t *testing.T) {
 		})
 
 		t.Run("for /posts/1/comments/2", func(t *testing.T) {
-			request := newPostCommentsRequest("1", "2")
+			request := newGetPostCommentsRequest("1", "2")
 			response := httptest.NewRecorder()
 
 			server.ServeHTTP(response, request)
@@ -602,27 +629,39 @@ func TestGETComments(t *testing.T) {
 	})
 
 	t.Run("returns 404 when try to get comments from post 3", func(t *testing.T) {
-		request := newPostCommentsRequest("3", "")
+		request := newGetPostCommentsRequest("3", "")
 		response := httptest.NewRecorder()
 
 		server.ServeHTTP(response, request)
 
 		assertStatus(t, response, http.StatusNotFound)
 
+		got := getErrorFromResponseModel(t, response.Body)
+		want := meshtalk.Error{
+			meshtalk.ErrPostNotFoundMessage,
+		}
+
+		assertGotError(t, got, want)
 	})
 
 	t.Run("returns 404 when try to get comment 3 from post 2", func(t *testing.T) {
-		request := newPostCommentsRequest("2", "3")
+		request := newGetPostCommentsRequest("2", "3")
 		response := httptest.NewRecorder()
 
 		server.ServeHTTP(response, request)
 
 		assertStatus(t, response, http.StatusNotFound)
 
+		got := getErrorFromResponseModel(t, response.Body)
+		want := meshtalk.Error{
+			meshtalk.ErrCommentNotFoundMessage,
+		}
+
+		assertGotError(t, got, want)
 	})
 
 	t.Run("returns all comments", func(t *testing.T) {
-		request := newCommentsRequest("", "")
+		request := newGetCommentsRequest("", "")
 		response := httptest.NewRecorder()
 
 		server.ServeHTTP(response, request)
@@ -753,6 +792,79 @@ func TestPOSTComments(t *testing.T) {
 	})
 }
 
+func TestPUTComments(t *testing.T) {
+	storage := &StubStorage{
+		posts: map[string]meshtalk.Post{
+			"1": {
+				Id:        "1",
+				Title:     "Post 1",
+				Content:   "Post Content",
+				Author:    "Alex",
+				CreatedAt: newDate(2023, time.December, 4, 16, 30, 30, 100),
+			},
+		},
+		comments: map[string]map[string]meshtalk.Comment{
+			"1": {
+				"1": {
+					Id:        "1",
+					Post:      "1",
+					Content:   "Some comment",
+					Author:    "Alexandre",
+					CreatedAt: newDate(2024, time.January, 23, 12, 30, 30, 100),
+				},
+				"2": {
+					Id:        "2",
+					Post:      "1",
+					Content:   "Some comment",
+					Author:    "João",
+					CreatedAt: newDate(2024, time.January, 23, 12, 30, 30, 100),
+				},
+			},
+		},
+	}
+	server := meshtalk.NewServer(storage)
+
+	t.Run("returns 204", func(t *testing.T) {
+		request := newEditCommentRequest("1", "1", `{"Content": "Edited Content"}`)
+		response := httptest.NewRecorder()
+
+		server.ServeHTTP(response, request)
+
+		assertStatus(t, response, http.StatusNoContent)
+
+		if len(storage.commentEditCalls) != 1 {
+			t.Error("didn't edit the comment")
+		}
+	})
+
+	t.Run("returns 404", func(t *testing.T) {
+		request := newEditCommentRequest("1", "3", `{"Content": "Edited Content"}`)
+		response := httptest.NewRecorder()
+
+		server.ServeHTTP(response, request)
+
+		assertStatus(t, response, http.StatusNotFound)
+
+		got := getErrorFromResponseModel(t, response.Body)
+		want := meshtalk.Error{
+			meshtalk.ErrCommentNotFoundMessage,
+		}
+
+		assertGotError(t, got, want)
+	})
+
+	t.Run("returns 500", func(t *testing.T) {
+		storage := &StubFailingStorage{}
+		server := meshtalk.NewServer(storage)
+		request := newEditCommentRequest("1", "2", `{"Content": "Edited Content"}`)
+		response := httptest.NewRecorder()
+
+		server.ServeHTTP(response, request)
+
+		assertStatus(t, response, http.StatusInternalServerError)
+	})
+}
+
 func TestServerTimeout(t *testing.T) {
 	t.Run("returns 408 when reaches server timeout", func(t *testing.T) {
 		storage := &MockStorage{
@@ -799,7 +911,7 @@ func newDeletePostRequest(id string) *http.Request {
 	return req
 }
 
-func newCommentsRequest(postId, commentId string) *http.Request {
+func newGetCommentsRequest(postId, commentId string) *http.Request {
 	url := "/comments"
 	if postId != "" {
 		url = url + "?post=" + postId
@@ -811,7 +923,7 @@ func newCommentsRequest(postId, commentId string) *http.Request {
 	return req
 }
 
-func newPostCommentsRequest(postId, commentId string) *http.Request {
+func newGetPostCommentsRequest(postId, commentId string) *http.Request {
 	url := "/posts/" + postId + "/comments"
 	if commentId != "" {
 		url += "/" + commentId
@@ -822,6 +934,11 @@ func newPostCommentsRequest(postId, commentId string) *http.Request {
 
 func newStoreCommentRequest(post, jsonRaw string) *http.Request {
 	req, _ := http.NewRequest(http.MethodPost, "/posts/"+post+"/comments", strings.NewReader(jsonRaw))
+	return req
+}
+
+func newEditCommentRequest(postId, commentId, jsonRaw string) *http.Request {
+	req, _ := http.NewRequest(http.MethodPut, "/posts/"+postId+"/comments/"+commentId, strings.NewReader(jsonRaw))
 	return req
 }
 
