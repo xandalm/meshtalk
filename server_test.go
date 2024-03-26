@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"meshtalk"
+	"meshtalk/domain/entities"
 	"net/http"
 	"net/http/httptest"
 	"reflect"
@@ -17,27 +18,27 @@ import (
 )
 
 type StubStorage struct {
-	posts            map[string]meshtalk.Post
-	comments         map[string]map[string]meshtalk.Comment
+	posts            map[string]entities.Post
+	comments         map[string]map[string]entities.Comment
 	postEditCalls    []string
 	commentEditCalls []string
 }
 
 func NewStubStorage() *StubStorage {
 	return &StubStorage{
-		map[string]meshtalk.Post{},
-		map[string]map[string]meshtalk.Comment{},
+		map[string]entities.Post{},
+		map[string]map[string]entities.Comment{},
 		[]string{},
 		[]string{},
 	}
 }
 
-func (s *StubStorage) GetPost(id string) *meshtalk.Post {
+func (s *StubStorage) GetPost(id string) *entities.Post {
 	found, ok := s.posts[id]
 	if !ok {
 		return nil
 	}
-	return &meshtalk.Post{
+	return &entities.Post{
 		Id:        found.Id,
 		Title:     found.Title,
 		Content:   found.Content,
@@ -48,15 +49,15 @@ func (s *StubStorage) GetPost(id string) *meshtalk.Post {
 	}
 }
 
-func (s *StubStorage) GetPosts() []meshtalk.Post {
-	posts := make([]meshtalk.Post, 0, len(s.posts))
+func (s *StubStorage) GetPosts() []entities.Post {
+	posts := make([]entities.Post, 0, len(s.posts))
 	for _, post := range s.posts {
 		posts = append(posts, post)
 	}
 	return posts
 }
 
-func (s *StubStorage) StorePost(post *meshtalk.Post) error {
+func (s *StubStorage) StorePost(post *entities.Post) error {
 	post.Id = strconv.Itoa(len(s.posts) + 1)
 	post.CreatedAt = timeToString(time.Now())
 	s.posts[post.Id] = *post
@@ -64,11 +65,11 @@ func (s *StubStorage) StorePost(post *meshtalk.Post) error {
 }
 
 func timeToString(t time.Time) string {
-	b, _ := time.Now().UTC().MarshalText()
+	b, _ := t.UTC().MarshalText()
 	return string(b)
 }
 
-func (s *StubStorage) EditPost(post *meshtalk.Post) error {
+func (s *StubStorage) EditPost(post *entities.Post) error {
 	_, ok := s.posts[post.Id]
 	if !ok {
 		return meshtalk.ErrPostNotFound
@@ -82,18 +83,18 @@ func (s *StubStorage) DeletePost(id string) error {
 	return nil
 }
 
-func (s *StubStorage) GetComments(post string) []meshtalk.Comment {
-	var res []meshtalk.Comment
-	var do func(*[]meshtalk.Comment, *meshtalk.Comment)
+func (s *StubStorage) GetComments(post string) []entities.Comment {
+	var res []entities.Comment
+	var do func(*[]entities.Comment, *entities.Comment)
 
 	if post != "" {
-		do = func(res *[]meshtalk.Comment, c *meshtalk.Comment) {
+		do = func(res *[]entities.Comment, c *entities.Comment) {
 			if post == c.Post {
 				*res = append(*res, *c)
 			}
 		}
 	} else {
-		do = func(res *[]meshtalk.Comment, c *meshtalk.Comment) {
+		do = func(res *[]entities.Comment, c *entities.Comment) {
 			*res = append(*res, *c)
 		}
 	}
@@ -107,13 +108,13 @@ func (s *StubStorage) GetComments(post string) []meshtalk.Comment {
 	return res
 }
 
-func (s *StubStorage) GetComment(post, id string) *meshtalk.Comment {
-	var found meshtalk.Comment
+func (s *StubStorage) GetComment(post, id string) *entities.Comment {
+	var found entities.Comment
 	found, ok := s.comments[post][id]
 	if !ok {
 		return nil
 	}
-	return &meshtalk.Comment{
+	return &entities.Comment{
 		Id:        found.Id,
 		Post:      found.Post,
 		Content:   found.Content,
@@ -124,10 +125,10 @@ func (s *StubStorage) GetComment(post, id string) *meshtalk.Comment {
 	}
 }
 
-func (s *StubStorage) StoreComment(comment *meshtalk.Comment) error {
+func (s *StubStorage) StoreComment(comment *entities.Comment) error {
 	_, hasComments := s.comments[comment.Post]
 	if !hasComments {
-		s.comments[comment.Post] = make(map[string]meshtalk.Comment)
+		s.comments[comment.Post] = make(map[string]entities.Comment)
 	}
 	comment.Id = strconv.Itoa(len(s.comments[comment.Post]) + 1)
 	comment.CreatedAt = timeToString(time.Now())
@@ -135,7 +136,7 @@ func (s *StubStorage) StoreComment(comment *meshtalk.Comment) error {
 	return nil
 }
 
-func (s *StubStorage) EditComment(comment *meshtalk.Comment) error {
+func (s *StubStorage) EditComment(comment *entities.Comment) error {
 	comments, ok := s.comments[comment.Post]
 	if !ok {
 		return meshtalk.ErrCommentNotFound
@@ -151,22 +152,22 @@ func (s *StubStorage) EditComment(comment *meshtalk.Comment) error {
 var errFoo = errors.New("some error")
 
 type StubFailingStorage struct {
-	posts map[string]meshtalk.Post
+	posts map[string]entities.Post
 }
 
-func (s *StubFailingStorage) GetPost(id string) *meshtalk.Post {
+func (s *StubFailingStorage) GetPost(id string) *entities.Post {
 	return nil
 }
 
-func (s *StubFailingStorage) GetPosts() []meshtalk.Post {
+func (s *StubFailingStorage) GetPosts() []entities.Post {
 	return nil
 }
 
-func (s *StubFailingStorage) StorePost(post *meshtalk.Post) error {
+func (s *StubFailingStorage) StorePost(post *entities.Post) error {
 	return errFoo
 }
 
-func (s *StubFailingStorage) EditPost(post *meshtalk.Post) error {
+func (s *StubFailingStorage) EditPost(post *entities.Post) error {
 	return errFoo
 }
 
@@ -174,47 +175,47 @@ func (s *StubFailingStorage) DeletePost(id string) error {
 	return errFoo
 }
 
-func (s *StubFailingStorage) GetComments(post string) []meshtalk.Comment {
+func (s *StubFailingStorage) GetComments(post string) []entities.Comment {
 	return nil
 }
 
-func (s *StubFailingStorage) GetComment(post, id string) *meshtalk.Comment {
+func (s *StubFailingStorage) GetComment(post, id string) *entities.Comment {
 	return nil
 }
 
-func (s *StubFailingStorage) StoreComment(comment *meshtalk.Comment) error {
+func (s *StubFailingStorage) StoreComment(comment *entities.Comment) error {
 	return errFoo
 }
 
-func (s *StubFailingStorage) EditComment(comment *meshtalk.Comment) error {
+func (s *StubFailingStorage) EditComment(comment *entities.Comment) error {
 	return errFoo
 }
 
 type MockStorage struct {
-	GetPostFunc      func(id string) *meshtalk.Post
-	GetPostsFunc     func() []meshtalk.Post
-	StorePostFunc    func(post *meshtalk.Post) error
-	EditPostFunc     func(post *meshtalk.Post) error
+	GetPostFunc      func(id string) *entities.Post
+	GetPostsFunc     func() []entities.Post
+	StorePostFunc    func(post *entities.Post) error
+	EditPostFunc     func(post *entities.Post) error
 	DeletePostFunc   func(id string) error
-	GetCommentsFunc  func(post string) []meshtalk.Comment
-	GetCommentFunc   func(post, id string) *meshtalk.Comment
-	StoreCommentFunc func(comment *meshtalk.Comment) error
-	EditCommentFunc  func(comment *meshtalk.Comment) error
+	GetCommentsFunc  func(post string) []entities.Comment
+	GetCommentFunc   func(post, id string) *entities.Comment
+	StoreCommentFunc func(comment *entities.Comment) error
+	EditCommentFunc  func(comment *entities.Comment) error
 }
 
-func (s *MockStorage) GetPost(id string) *meshtalk.Post {
+func (s *MockStorage) GetPost(id string) *entities.Post {
 	return s.GetPostFunc(id)
 }
 
-func (s *MockStorage) GetPosts() []meshtalk.Post {
+func (s *MockStorage) GetPosts() []entities.Post {
 	return s.GetPostsFunc()
 }
 
-func (s *MockStorage) StorePost(post *meshtalk.Post) error {
+func (s *MockStorage) StorePost(post *entities.Post) error {
 	return s.StorePostFunc(post)
 }
 
-func (s *MockStorage) EditPost(post *meshtalk.Post) error {
+func (s *MockStorage) EditPost(post *entities.Post) error {
 	return s.EditPostFunc(post)
 }
 
@@ -222,25 +223,25 @@ func (s *MockStorage) DeletePost(id string) error {
 	return s.DeletePostFunc(id)
 }
 
-func (s *MockStorage) GetComments(post string) []meshtalk.Comment {
+func (s *MockStorage) GetComments(post string) []entities.Comment {
 	return s.GetCommentsFunc(post)
 }
 
-func (s *MockStorage) GetComment(post, id string) *meshtalk.Comment {
+func (s *MockStorage) GetComment(post, id string) *entities.Comment {
 	return s.GetCommentFunc(post, id)
 }
 
-func (s *MockStorage) StoreComment(comment *meshtalk.Comment) error {
+func (s *MockStorage) StoreComment(comment *entities.Comment) error {
 	return s.StoreCommentFunc(comment)
 }
 
-func (s *MockStorage) EditComment(comment *meshtalk.Comment) error {
+func (s *MockStorage) EditComment(comment *entities.Comment) error {
 	return s.EditCommentFunc(comment)
 }
 
 func TestGETPosts(t *testing.T) {
 	storage := &StubStorage{
-		posts: map[string]meshtalk.Post{
+		posts: map[string]entities.Post{
 			"1": {
 				Id:        "1",
 				Title:     "Post 1",
@@ -313,7 +314,7 @@ func TestGETPosts(t *testing.T) {
 
 		responseModel := getResponseModelFromResponse(t, response.Body)
 
-		var got []meshtalk.Post
+		var got []entities.Post
 		data, _ := json.Marshal(responseModel.Data)
 
 		if err := json.NewDecoder(bytes.NewReader(data)).Decode(&got); err != nil {
@@ -341,7 +342,7 @@ func TestPOSTPosts(t *testing.T) {
 
 		got := getPostFromResponseModel(t, response.Body)
 
-		want := meshtalk.Post{
+		want := entities.Post{
 			Id:      "1",
 			Title:   "Post X",
 			Content: "Post Content",
@@ -413,9 +414,9 @@ func TestPOSTPosts(t *testing.T) {
 
 func TestPUTPosts(t *testing.T) {
 	storage := &StubStorage{
-		posts: map[string]meshtalk.Post{
-			"1": *meshtalk.NewPost("1", "Post 1", "Post Content", "Alex"),
-			"2": *meshtalk.NewPost("2", "Post 2", "Post Content", "Andre"),
+		posts: map[string]entities.Post{
+			"1": *entities.NewPost("1", "Post 1", "Post Content", "Alex"),
+			"2": *entities.NewPost("2", "Post 2", "Post Content", "Andre"),
 		},
 	}
 	server := meshtalk.NewServer(storage)
@@ -449,8 +450,8 @@ func TestPUTPosts(t *testing.T) {
 	})
 	t.Run("returns 500 on unexpected error", func(t *testing.T) {
 		storage := &StubFailingStorage{
-			posts: map[string]meshtalk.Post{
-				"1": *meshtalk.NewPost("1", "Post 1", "Post Content", "Alex"),
+			posts: map[string]entities.Post{
+				"1": *entities.NewPost("1", "Post 1", "Post Content", "Alex"),
 			},
 		}
 		server := meshtalk.NewServer(storage)
@@ -467,8 +468,8 @@ func TestPUTPosts(t *testing.T) {
 func TestDELETEPosts(t *testing.T) {
 	t.Run("returns 200 on post deleted", func(t *testing.T) {
 		storage := &StubStorage{
-			posts: map[string]meshtalk.Post{
-				"1": *meshtalk.NewPost("1", "Post 1", "Post Content", "Alex"),
+			posts: map[string]entities.Post{
+				"1": *entities.NewPost("1", "Post 1", "Post Content", "Alex"),
 			},
 		}
 		server := meshtalk.NewServer(storage)
@@ -497,7 +498,7 @@ func TestDELETEPosts(t *testing.T) {
 
 func TestGETComments(t *testing.T) {
 	storage := &StubStorage{
-		posts: map[string]meshtalk.Post{
+		posts: map[string]entities.Post{
 			"1": {
 				Id:        "1",
 				Title:     "Post 1",
@@ -513,7 +514,7 @@ func TestGETComments(t *testing.T) {
 				CreatedAt: newDate(2023, time.December, 4, 17, 0, 0, 0),
 			},
 		},
-		comments: map[string]map[string]meshtalk.Comment{
+		comments: map[string]map[string]entities.Comment{
 			"1": {
 				"1": {
 					Id:        "1",
@@ -668,7 +669,7 @@ func TestGETComments(t *testing.T) {
 
 func TestPOSTComments(t *testing.T) {
 	storage := &StubStorage{
-		posts: map[string]meshtalk.Post{
+		posts: map[string]entities.Post{
 			"1": {
 				Id:        "1",
 				Title:     "Post 1",
@@ -684,7 +685,7 @@ func TestPOSTComments(t *testing.T) {
 				CreatedAt: newDate(2023, time.December, 4, 17, 0, 0, 0),
 			},
 		},
-		comments: map[string]map[string]meshtalk.Comment{},
+		comments: map[string]map[string]entities.Comment{},
 	}
 	server := meshtalk.NewServer(storage)
 
@@ -697,7 +698,7 @@ func TestPOSTComments(t *testing.T) {
 		assertStatus(t, response, http.StatusCreated)
 
 		got := getCommentFromResponseModel(t, response.Body)
-		want := meshtalk.Comment{
+		want := entities.Comment{
 			Id:      "1",
 			Post:    "1",
 			Content: "Comment Content",
@@ -776,7 +777,7 @@ func TestPOSTComments(t *testing.T) {
 
 func TestPUTComments(t *testing.T) {
 	storage := &StubStorage{
-		posts: map[string]meshtalk.Post{
+		posts: map[string]entities.Post{
 			"1": {
 				Id:        "1",
 				Title:     "Post 1",
@@ -785,7 +786,7 @@ func TestPUTComments(t *testing.T) {
 				CreatedAt: newDate(2023, time.December, 4, 16, 30, 30, 100),
 			},
 		},
-		comments: map[string]map[string]meshtalk.Comment{
+		comments: map[string]map[string]entities.Comment{
 			"1": {
 				"1": {
 					Id:        "1",
@@ -848,9 +849,9 @@ func TestPUTComments(t *testing.T) {
 func TestServerTimeout(t *testing.T) {
 	t.Run("returns 408 when reaches server timeout", func(t *testing.T) {
 		storage := &MockStorage{
-			GetPostFunc: func(id string) *meshtalk.Post {
+			GetPostFunc: func(id string) *entities.Post {
 				time.Sleep(time.Second * 2)
-				return &meshtalk.Post{}
+				return &entities.Post{}
 			},
 		}
 		server := meshtalk.NewServer(storage)
@@ -930,7 +931,7 @@ func assertStatus(t testing.TB, response *httptest.ResponseRecorder, want int) {
 	}
 }
 
-func assertGotPost(t testing.TB, got, want meshtalk.Post) {
+func assertGotPost(t testing.TB, got, want entities.Post) {
 	t.Helper()
 
 	if !reflect.DeepEqual(got, want) {
@@ -972,12 +973,12 @@ func getResponseModelFromResponse(t *testing.T, body io.Reader) meshtalk.Respons
 	return responseModel
 }
 
-func getPostFromResponseModel(t *testing.T, body io.Reader) meshtalk.Post {
+func getPostFromResponseModel(t *testing.T, body io.Reader) entities.Post {
 	t.Helper()
 
 	responseModel := getResponseModelFromResponse(t, body)
 
-	var post meshtalk.Post
+	var post entities.Post
 	data, _ := json.Marshal(responseModel.Data)
 
 	if err := json.NewDecoder(bytes.NewReader(data)).Decode(&post); err != nil {
@@ -1002,13 +1003,13 @@ func getErrorFromResponseModel(t *testing.T, body io.Reader) meshtalk.Error {
 	return responseError
 }
 
-func getCommentsListFromResponseModel(t *testing.T, body io.Reader) []meshtalk.Comment {
+func getCommentsListFromResponseModel(t *testing.T, body io.Reader) []entities.Comment {
 	t.Helper()
 
 	responseModel := getResponseModelFromResponse(t, body)
 	data, _ := json.Marshal(responseModel.Data)
 
-	var list []meshtalk.Comment
+	var list []entities.Comment
 	if err := json.NewDecoder(bytes.NewReader(data)).Decode(&list); err != nil {
 		t.Fatalf("unable to parse data into comments list, %v", err)
 	}
@@ -1016,13 +1017,13 @@ func getCommentsListFromResponseModel(t *testing.T, body io.Reader) []meshtalk.C
 	return list
 }
 
-func getCommentFromResponseModel(t *testing.T, body io.Reader) meshtalk.Comment {
+func getCommentFromResponseModel(t *testing.T, body io.Reader) entities.Comment {
 	t.Helper()
 
 	responseModel := getResponseModelFromResponse(t, body)
 	data, _ := json.Marshal(responseModel.Data)
 
-	var c meshtalk.Comment
+	var c entities.Comment
 	if err := json.NewDecoder(bytes.NewReader(data)).Decode(&c); err != nil {
 		t.Fatalf("unable to parse data into comments list, %v", err)
 	}

@@ -1,8 +1,8 @@
-package meshtalk
+package entities
 
-type Post struct {
+type Comment struct {
 	Id        string `json:"id"`
-	Title     string `json:"title"`
+	Post      string `json:"postId"`
 	Content   string `json:"content"`
 	Author    string `json:"author"`
 	CreatedAt string `json:"createdAt"`
@@ -10,10 +10,10 @@ type Post struct {
 	DeletedAt string `json:"deletedAt"`
 }
 
-func NewPost(id, title, content, author string) *Post {
-	return &Post{
+func NewComment(id, post, content, author string) *Comment {
+	return &Comment{
 		Id:      id,
-		Title:   title,
+		Post:    post,
 		Content: content,
 		Author:  author,
 	}

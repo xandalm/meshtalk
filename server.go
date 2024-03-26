@@ -6,23 +6,13 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"meshtalk/domain/entities"
+	"meshtalk/domain/services"
 	"net/http"
 	"time"
 
 	router "github.com/xandalm/go-router"
 )
-
-type Storage interface {
-	GetPost(id string) *Post
-	GetPosts() []Post
-	StorePost(post *Post) error
-	EditPost(post *Post) error
-	DeletePost(id string) error
-	GetComments(post string) []Comment
-	GetComment(post, id string) *Comment
-	StoreComment(comment *Comment) error
-	EditComment(comment *Comment) error
-}
 
 type Error struct {
 	Name    string `json:"name,omitempty"`
@@ -64,12 +54,12 @@ var (
 )
 
 type Server struct {
-	storage Storage
+	storage services.Storage
 	router  *router.Router
 	to      time.Duration
 }
 
-func NewServer(storage Storage) *Server {
+func NewServer(storage services.Storage) *Server {
 	s := &Server{
 		storage: storage,
 		router:  &router.Router{},
@@ -145,7 +135,7 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) storePostHandler(w router.ResponseWriter, r *router.Request) {
-	var post Post
+	var post entities.Post
 	err := r.ParseBodyInto(&post)
 	if err != nil {
 		s.writeResponse(w, nil, ErrUnsupportedPost)
@@ -190,7 +180,7 @@ func (s *Server) getPostHandler(w router.ResponseWriter, r *router.Request) {
 func (s *Server) editPostHandler(w router.ResponseWriter, r *router.Request) {
 	postId := r.Params()["id"]
 
-	var post Post
+	var post entities.Post
 	err := r.ParseBodyInto(&post)
 	if err != nil {
 		s.writeResponse(w, nil, ErrUnsupportedPost)
@@ -216,7 +206,7 @@ func (s *Server) deletePostHandler(w router.ResponseWriter, r *router.Request) {
 }
 
 func (s *Server) getCommentsHandler(w router.ResponseWriter, r *router.Request) {
-	var comments []Comment
+	var comments []entities.Comment
 
 	query := r.URL.Query()
 
@@ -273,7 +263,7 @@ func (s *Server) storePostCommentHandler(w router.ResponseWriter, r *router.Requ
 		return
 	}
 
-	var comment Comment
+	var comment entities.Comment
 	err := r.ParseBodyInto(&comment)
 
 	if err != nil {
@@ -300,7 +290,7 @@ func (s *Server) storePostCommentHandler(w router.ResponseWriter, r *router.Requ
 func (s *Server) editPostCommentsHandler(w router.ResponseWriter, r *router.Request) {
 	params := r.Params()
 
-	var comment Comment
+	var comment entities.Comment
 	if err := r.ParseBodyInto(&comment); err != nil {
 		s.writeResponse(w, nil, ErrUnsupportedComment)
 		return
