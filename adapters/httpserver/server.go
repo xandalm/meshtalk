@@ -1,4 +1,4 @@
-package meshtalk
+package httpserver
 
 import (
 	"context"
