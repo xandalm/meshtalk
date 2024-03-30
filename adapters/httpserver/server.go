@@ -8,6 +8,7 @@ import (
 	"io"
 	"meshtalk/domain/entities"
 	"meshtalk/domain/services"
+	"meshtalk/domain/services/memory"
 	"net/http"
 	"time"
 
@@ -51,6 +52,12 @@ var (
 	ErrCommentNotFound      = NewError("ERR_COMMENT_NOT_FOUND", ErrCommentNotFoundMessage)
 	ErrUnsupportedComment   = NewError("ERR_UNSUPPORTED_COMMENT", ErrUnsupportedCommentMessage)
 	ErrMissingCommentFields = NewError("ERR_MISSING_COMMENT_FIELDS", ErrMissingCommentFieldsMessage)
+	mErrors                 = map[error]*Error{
+		memory.ErrPostNotFound:         ErrPostNotFound,
+		memory.ErrMissingPostFields:    ErrMissingPostFields,
+		memory.ErrCommentNotFound:      ErrCommentNotFound,
+		memory.ErrMissingCommentFields: ErrMissingCommentFields,
+	}
 )
 
 type Server struct {
@@ -69,11 +76,11 @@ func NewServer(storage services.Storage) *Server {
 	s.router.GetFunc("/posts/{id}", s.getPostHandler)
 	s.router.PutFunc("/posts/{id}", s.editPostHandler)
 	s.router.DeleteFunc("/posts/{id}", s.deletePostHandler)
-	s.router.GetFunc("/posts", s.getPostHandler)
+	s.router.GetFunc("/posts", s.getPostsHandler)
 	s.router.PostFunc("/posts", s.storePostHandler)
 
-	s.router.GetFunc("/posts/{pid}/comments/{cid}", s.getPostCommentsHandler)
-	s.router.PutFunc("/posts/{pid}/comments/{cid}", s.editPostCommentsHandler)
+	s.router.GetFunc("/posts/{pid}/comments/{cid}", s.getPostCommentHandler)
+	s.router.PutFunc("/posts/{pid}/comments/{cid}", s.editPostCommentHandler)
 	s.router.GetFunc("/posts/{pid}/comments", s.getPostCommentsHandler)
 	s.router.PostFunc("/posts/{pid}/comments", s.storePostCommentHandler)
 
@@ -90,20 +97,21 @@ func (s *Server) SetTimeout(duration time.Duration) error {
 	return nil
 }
 
-func (s *Server) writeResponse(w http.ResponseWriter, data, err any) {
-	if err != nil {
-		switch err {
-		case ErrPostNotFound,
-			ErrCommentNotFound:
-			w.WriteHeader(http.StatusNotFound)
-		case ErrMissingPostFields,
-			ErrMissingCommentFields,
-			ErrUnsupportedPost,
-			ErrUnsupportedComment:
-			w.WriteHeader(http.StatusBadRequest)
-		default:
-			w.WriteHeader(http.StatusInternalServerError)
-		}
+func (s *Server) writeResponse(w http.ResponseWriter, data any, err error) {
+	if e, ok := mErrors[err]; ok {
+		err = e
+	}
+	switch err {
+	case ErrPostNotFound,
+		ErrCommentNotFound:
+		w.WriteHeader(http.StatusNotFound)
+	case ErrMissingPostFields,
+		ErrMissingCommentFields,
+		ErrUnsupportedPost,
+		ErrUnsupportedComment:
+		w.WriteHeader(http.StatusBadRequest)
+	default:
+		w.WriteHeader(http.StatusInternalServerError)
 	}
 	writeJSON(
 		w,
@@ -142,11 +150,6 @@ func (s *Server) storePostHandler(w router.ResponseWriter, r *router.Request) {
 		return
 	}
 
-	if post.Title == "" || post.Content == "" || post.Author == "" {
-		s.writeResponse(w, nil, ErrMissingPostFields)
-		return
-	}
-
 	if err := s.storage.StorePost(&post); err != nil {
 		s.writeResponse(w, nil, err)
 		return
@@ -163,18 +166,25 @@ func (s *Server) storePostHandler(w router.ResponseWriter, r *router.Request) {
 func (s *Server) getPostHandler(w router.ResponseWriter, r *router.Request) {
 	postId := r.Params()["id"]
 
-	if postId == "" {
-		s.writeResponse(w, s.storage.GetPosts(), nil)
+	found, err := s.storage.GetPost(postId)
+	if err != nil {
+		s.writeResponse(w, nil, err)
 		return
 	}
-
-	foundPost := s.storage.GetPost(postId)
-
-	if foundPost == nil {
-		s.writeResponse(w, nil, ErrPostNotFound)
+	if found != nil {
+		s.writeResponse(w, *found, nil)
 		return
 	}
-	s.writeResponse(w, *foundPost, nil)
+	s.writeResponse(w, nil, ErrPostNotFound)
+}
+
+func (s *Server) getPostsHandler(w router.ResponseWriter, _ *router.Request) {
+	posts, err := s.storage.GetPosts()
+	if err != nil {
+		s.writeResponse(w, nil, err)
+		return
+	}
+	s.writeResponse(w, posts, nil)
 }
 
 func (s *Server) editPostHandler(w router.ResponseWriter, r *router.Request) {
@@ -206,62 +216,82 @@ func (s *Server) deletePostHandler(w router.ResponseWriter, r *router.Request) {
 }
 
 func (s *Server) getCommentsHandler(w router.ResponseWriter, r *router.Request) {
-	var comments []entities.Comment
 
 	query := r.URL.Query()
 
 	post, hasPost := query["post"]
+	comment, hasComment := query["comment"]
 
-	if hasPost {
-		id, hasId := query["id"]
-		if hasId {
-			found := s.storage.GetComment(post[0], id[0])
-			if found != nil {
-				comments = append(comments, *found)
-			}
-		} else {
-			comments = s.storage.GetComments(post[0])
+	if !hasPost {
+		comments, err := s.storage.GetComments("")
+		if err != nil {
+			s.writeResponse(w, nil, err)
+			return
 		}
-	} else {
-		comments = s.storage.GetComments("")
+		s.writeResponse(w, comments, nil)
+		return
+	}
+	if !hasComment {
+		comments, err := s.storage.GetComments(post[0])
+		if err != nil {
+			s.writeResponse(w, nil, err)
+			return
+		}
+		s.writeResponse(w, comments, nil)
+		return
+	}
+	comments, err := s.storage.GetComment(post[0], comment[0])
+	if err != nil {
+		s.writeResponse(w, nil, err)
+		return
 	}
 	s.writeResponse(w, comments, nil)
+}
+
+func (s *Server) getPostCommentHandler(w router.ResponseWriter, r *router.Request) {
+	params := r.Params()
+
+	pid := params["pid"]
+	cid := params["cid"]
+
+	post, err := s.storage.GetPost(pid)
+	if err != nil {
+		s.writeResponse(w, nil, err)
+		return
+	}
+	if post == nil {
+		s.writeResponse(w, nil, ErrPostNotFound)
+		return
+	}
+
+	comment, err := s.storage.GetComment(pid, cid)
+	if err != nil {
+		s.writeResponse(w, nil, err)
+		return
+	}
+	if comment == nil {
+		s.writeResponse(w, nil, ErrCommentNotFound)
+		return
+	}
+	s.writeResponse(w, comment, nil)
 }
 
 func (s *Server) getPostCommentsHandler(w router.ResponseWriter, r *router.Request) {
 	params := r.Params()
 
 	pid := params["pid"]
-	cid := params["cid"]
 
-	post := s.storage.GetPost(pid)
-
-	if post == nil {
-		s.writeResponse(w, nil, ErrPostNotFound)
+	comments, err := s.storage.GetComments(pid)
+	if err != nil {
+		s.writeResponse(w, nil, err)
 		return
 	}
 
-	if cid != "" {
-		comment := s.storage.GetComment(pid, cid)
-		if comment == nil {
-			s.writeResponse(w, nil, ErrCommentNotFound)
-			return
-		}
-		s.writeResponse(w, comment, nil)
-		return
-	}
-	s.writeResponse(w, s.storage.GetComments(pid), nil)
+	s.writeResponse(w, comments, nil)
 }
 
 func (s *Server) storePostCommentHandler(w router.ResponseWriter, r *router.Request) {
 	pid := r.Params()["pid"]
-
-	post := s.storage.GetPost(pid)
-
-	if post == nil {
-		s.writeResponse(w, nil, ErrPostNotFound)
-		return
-	}
 
 	var comment entities.Comment
 	err := r.ParseBodyInto(&comment)
@@ -271,12 +301,7 @@ func (s *Server) storePostCommentHandler(w router.ResponseWriter, r *router.Requ
 		return
 	}
 
-	if comment.Content == "" || comment.Author == "" {
-		s.writeResponse(w, nil, ErrMissingCommentFields)
-		return
-	}
-
-	comment.Post = post.Id
+	comment.Post = pid
 
 	if err := s.storage.StoreComment(&comment); err != nil {
 		s.writeResponse(w, nil, err)
@@ -287,7 +312,7 @@ func (s *Server) storePostCommentHandler(w router.ResponseWriter, r *router.Requ
 	s.writeResponse(w, comment, nil)
 }
 
-func (s *Server) editPostCommentsHandler(w router.ResponseWriter, r *router.Request) {
+func (s *Server) editPostCommentHandler(w router.ResponseWriter, r *router.Request) {
 	params := r.Params()
 
 	var comment entities.Comment

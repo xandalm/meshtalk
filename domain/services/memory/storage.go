@@ -7,6 +7,13 @@ import (
 	"time"
 )
 
+var (
+	ErrPostNotFound         = errors.New("storage: post not found")
+	ErrMissingPostFields    = errors.New("storage: title, content and author are required for the post")
+	ErrCommentNotFound      = errors.New("storage: comment not found")
+	ErrMissingCommentFields = errors.New("storage: content and author are required for the comment")
+)
+
 type Storage struct {
 	posts_pk int
 	posts    map[string]entities.Post
@@ -21,10 +28,10 @@ func NewStorage() *Storage {
 	}
 }
 
-func (s *Storage) GetPost(id string) *entities.Post {
+func (s *Storage) GetPost(id string) (*entities.Post, error) {
 	found, ok := s.posts[id]
 	if !ok || found.DeletedAt == "" {
-		return nil
+		return nil, nil
 	}
 	return &entities.Post{
 		Id:        found.Id,
@@ -34,10 +41,10 @@ func (s *Storage) GetPost(id string) *entities.Post {
 		CreatedAt: found.CreatedAt,
 		UpdatedAt: found.UpdatedAt,
 		DeletedAt: found.DeletedAt,
-	}
+	}, nil
 }
 
-func (s *Storage) GetPosts() []entities.Post {
+func (s *Storage) GetPosts() ([]entities.Post, error) {
 	posts := make([]entities.Post, 0, len(s.posts))
 
 	for _, p := range s.posts {
@@ -46,7 +53,7 @@ func (s *Storage) GetPosts() []entities.Post {
 		}
 	}
 
-	return posts
+	return posts, nil
 }
 
 func timeToString(t time.Time) string {
@@ -56,6 +63,11 @@ func timeToString(t time.Time) string {
 }
 
 func (s *Storage) StorePost(post *entities.Post) error {
+
+	if post.Title == "" || post.Content == "" || post.Author == "" {
+		return ErrMissingPostFields
+	}
+
 	post.Id = strconv.Itoa(s.posts_pk)
 	post.CreatedAt = timeToString(time.Now())
 	s.posts[post.Id] = *post
@@ -63,12 +75,16 @@ func (s *Storage) StorePost(post *entities.Post) error {
 	return nil
 }
 
-var ErrNonExistentData = errors.New("storage: non-existent data")
-
 func (s *Storage) EditPost(post *entities.Post) error {
 	found, ok := s.posts[post.Id]
 	if !ok || found.DeletedAt != "" {
-		return ErrNonExistentData
+		return ErrPostNotFound
+	}
+
+	if (found.Title != post.Title && post.Title == "") ||
+		(found.Content != post.Content && post.Content == "") ||
+		(found.Author != post.Author && post.Author == "") {
+		return ErrMissingPostFields
 	}
 
 	post.UpdatedAt = timeToString(time.Now())
@@ -79,43 +95,57 @@ func (s *Storage) EditPost(post *entities.Post) error {
 func (s *Storage) DeletePost(id string) error {
 	post, ok := s.posts[id]
 	if !ok {
-		return ErrNonExistentData
+		return ErrPostNotFound
 	}
 	post.DeletedAt = timeToString(time.Now())
 	s.posts[id] = post
 	return nil
 }
 
-func (s *Storage) GetComments(post string) []entities.Comment {
-	var res []entities.Comment
-	for _, comments := range s.comments {
-		for _, comment := range comments {
-			if comment.DeletedAt != "" {
-				res = append(res, comment)
+func (s *Storage) GetComments(post string) ([]entities.Comment, error) {
+	if _, ok := s.posts[post]; ok {
+		var res []entities.Comment
+		for _, comments := range s.comments {
+			for _, comment := range comments {
+				if comment.DeletedAt != "" {
+					res = append(res, comment)
+				}
 			}
 		}
+		return res, nil
 	}
-	return res
+	return nil, ErrPostNotFound
 }
 
-func (s *Storage) GetComment(post, id string) *entities.Comment {
-	var found entities.Comment
-	found, ok := s.comments[post][id]
-	if !ok || found.DeletedAt != "" {
-		return nil
+func (s *Storage) GetComment(post, comment string) (*entities.Comment, error) {
+	if _, ok := s.posts[post]; ok {
+		found, ok := s.comments[post][comment]
+		if !ok || found.DeletedAt != "" {
+			return nil, nil
+		}
+		return &entities.Comment{
+			Id:        found.Id,
+			Post:      found.Post,
+			Content:   found.Content,
+			Author:    found.Author,
+			CreatedAt: found.CreatedAt,
+			UpdatedAt: found.UpdatedAt,
+			DeletedAt: found.DeletedAt,
+		}, nil
 	}
-	return &entities.Comment{
-		Id:        found.Id,
-		Post:      found.Post,
-		Content:   found.Content,
-		Author:    found.Author,
-		CreatedAt: found.CreatedAt,
-		UpdatedAt: found.UpdatedAt,
-		DeletedAt: found.DeletedAt,
-	}
+	return nil, ErrPostNotFound
 }
 
 func (s *Storage) StoreComment(c *entities.Comment) error {
+
+	if c.Content == "" || c.Author == "" {
+		return ErrMissingCommentFields
+	}
+
+	if _, hasPost := s.posts[c.Post]; !hasPost {
+		return ErrPostNotFound
+	}
+
 	_, hasComments := s.comments[c.Post]
 	if !hasComments {
 		s.comments[c.Post] = make(map[string]entities.Comment)
@@ -128,11 +158,17 @@ func (s *Storage) StoreComment(c *entities.Comment) error {
 
 func (s *Storage) EditComment(c *entities.Comment) error {
 	if comments, hasComments := s.comments[c.Post]; hasComments {
-		if _, hasComment := comments[c.Id]; hasComment {
+		if found, hasComment := comments[c.Id]; hasComment {
+
+			if (found.Content != c.Content && c.Content == "") ||
+				(found.Author != c.Author && c.Author == "") {
+				return ErrMissingCommentFields
+			}
+
 			c.UpdatedAt = timeToString(time.Now())
 			comments[c.Id] = *c
 			return nil
 		}
 	}
-	return ErrNonExistentData
+	return ErrCommentNotFound
 }
