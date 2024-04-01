@@ -34,14 +34,15 @@ func TestServer(t *testing.T) {
 	})
 
 	if err := launcher.StartAndWait(2 * time.Second); err != nil {
-		log.Fatalf("cannot launch server, %v", err)
+		log.Fatalf("unable to launch the server, %v", err)
 	}
-
-	specifications.CreatingAPostSpecification(t, driver)
-
-	t.Cleanup(func() {
+	defer func() {
 		if err := launcher.EndAndClean(); err != nil {
-			log.Fatalf("cannot graceful end server, %v", err)
+			log.Fatalf("unable to gracefully end the server, %v", err)
 		}
-	})
+	}()
+
+	specifications.SuccessfullyCreatePost(t, driver)
+	specifications.UnableToCreatePostDueToMissingRequiredValues(t, driver)
+
 }

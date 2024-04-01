@@ -39,18 +39,18 @@ type Driver struct {
 }
 
 func (d *Driver) CreateAPost(args ...string) (string, error) {
-	requiredArgs := ParseArgs(args...).Get("title", "content", "author")
-	if len(requiredArgs) != 3 {
-		return "", fmt.Errorf("missing required args")
-	}
-	title, _ := requiredArgs["title"].(string)
-	content, _ := requiredArgs["content"].(string)
-	author, _ := requiredArgs["author"].(string)
+	_args := ParseArgs(args...)
 
-	body := strings.NewReader(fmt.Sprintf(`{"title": "%s", "content": "%s", "author": "%s"}`,
-		title,
-		content,
-		author))
+	var body io.Reader
+	if len(_args) > 0 {
+		builder := strings.Builder{}
+		for name, value := range _args {
+			builder.WriteString(fmt.Sprintf(`"%s": %s,`, name, value))
+		}
+		body = strings.NewReader("{" + builder.String()[:builder.Len()-1] + "}") // removing the last comma
+	} else {
+		body = strings.NewReader("{}")
+	}
 
 	res, err := d.Client.Post(d.BaseURL+"/posts", "json", body)
 	if err != nil {
