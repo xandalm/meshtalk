@@ -1,6 +1,16 @@
-package services
+package storage
 
-import "meshtalk/domain/entities"
+import (
+	"errors"
+	"meshtalk/domain/entities"
+)
+
+var (
+	ErrPostNotFound         = errors.New("storage: post not found")
+	ErrMissingPostFields    = errors.New("storage: title, content and author are required for the post")
+	ErrCommentNotFound      = errors.New("storage: comment not found")
+	ErrMissingCommentFields = errors.New("storage: content and author are required for the comment")
+)
 
 type Storage interface {
 	GetPost(id string) (*entities.Post, error)

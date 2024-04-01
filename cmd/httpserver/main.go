@@ -3,7 +3,7 @@ package main
 import (
 	"log"
 	"meshtalk/adapters/httpserver"
-	"meshtalk/domain/services/memory"
+	"meshtalk/domain/services/storage/memory"
 	"net/http"
 )
 

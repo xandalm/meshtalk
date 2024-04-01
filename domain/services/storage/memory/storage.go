@@ -1,17 +1,10 @@
 package memory
 
 import (
-	"errors"
 	"meshtalk/domain/entities"
+	"meshtalk/domain/services/storage"
 	"strconv"
 	"time"
-)
-
-var (
-	ErrPostNotFound         = errors.New("storage: post not found")
-	ErrMissingPostFields    = errors.New("storage: title, content and author are required for the post")
-	ErrCommentNotFound      = errors.New("storage: comment not found")
-	ErrMissingCommentFields = errors.New("storage: content and author are required for the comment")
 )
 
 type Storage struct {
@@ -65,7 +58,7 @@ func timeToString(t time.Time) string {
 func (s *Storage) StorePost(post *entities.Post) error {
 
 	if post.Title == "" || post.Content == "" || post.Author == "" {
-		return ErrMissingPostFields
+		return storage.ErrMissingPostFields
 	}
 
 	post.Id = strconv.Itoa(s.posts_pk)
@@ -78,13 +71,13 @@ func (s *Storage) StorePost(post *entities.Post) error {
 func (s *Storage) EditPost(post *entities.Post) error {
 	found, ok := s.posts[post.Id]
 	if !ok || found.DeletedAt != "" {
-		return ErrPostNotFound
+		return storage.ErrPostNotFound
 	}
 
 	if (found.Title != post.Title && post.Title == "") ||
 		(found.Content != post.Content && post.Content == "") ||
 		(found.Author != post.Author && post.Author == "") {
-		return ErrMissingPostFields
+		return storage.ErrMissingPostFields
 	}
 
 	post.UpdatedAt = timeToString(time.Now())
@@ -95,7 +88,7 @@ func (s *Storage) EditPost(post *entities.Post) error {
 func (s *Storage) DeletePost(id string) error {
 	post, ok := s.posts[id]
 	if !ok {
-		return ErrPostNotFound
+		return storage.ErrPostNotFound
 	}
 	post.DeletedAt = timeToString(time.Now())
 	s.posts[id] = post
@@ -114,7 +107,7 @@ func (s *Storage) GetComments(post string) ([]entities.Comment, error) {
 		}
 		return res, nil
 	}
-	return nil, ErrPostNotFound
+	return nil, storage.ErrPostNotFound
 }
 
 func (s *Storage) GetComment(post, comment string) (*entities.Comment, error) {
@@ -133,17 +126,17 @@ func (s *Storage) GetComment(post, comment string) (*entities.Comment, error) {
 			DeletedAt: found.DeletedAt,
 		}, nil
 	}
-	return nil, ErrPostNotFound
+	return nil, storage.ErrPostNotFound
 }
 
 func (s *Storage) StoreComment(c *entities.Comment) error {
 
 	if c.Content == "" || c.Author == "" {
-		return ErrMissingCommentFields
+		return storage.ErrMissingCommentFields
 	}
 
 	if _, hasPost := s.posts[c.Post]; !hasPost {
-		return ErrPostNotFound
+		return storage.ErrPostNotFound
 	}
 
 	_, hasComments := s.comments[c.Post]
@@ -162,7 +155,7 @@ func (s *Storage) EditComment(c *entities.Comment) error {
 
 			if (found.Content != c.Content && c.Content == "") ||
 				(found.Author != c.Author && c.Author == "") {
-				return ErrMissingCommentFields
+				return storage.ErrMissingCommentFields
 			}
 
 			c.UpdatedAt = timeToString(time.Now())
@@ -170,5 +163,5 @@ func (s *Storage) EditComment(c *entities.Comment) error {
 			return nil
 		}
 	}
-	return ErrCommentNotFound
+	return storage.ErrCommentNotFound
 }

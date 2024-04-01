@@ -7,8 +7,7 @@ import (
 	"fmt"
 	"io"
 	"meshtalk/domain/entities"
-	"meshtalk/domain/services"
-	"meshtalk/domain/services/memory"
+	"meshtalk/domain/services/storage"
 	"net/http"
 	"time"
 
@@ -53,20 +52,20 @@ var (
 	ErrUnsupportedComment   = NewError("ERR_UNSUPPORTED_COMMENT", ErrUnsupportedCommentMessage)
 	ErrMissingCommentFields = NewError("ERR_MISSING_COMMENT_FIELDS", ErrMissingCommentFieldsMessage)
 	mErrors                 = map[error]*Error{
-		memory.ErrPostNotFound:         ErrPostNotFound,
-		memory.ErrMissingPostFields:    ErrMissingPostFields,
-		memory.ErrCommentNotFound:      ErrCommentNotFound,
-		memory.ErrMissingCommentFields: ErrMissingCommentFields,
+		storage.ErrPostNotFound:         ErrPostNotFound,
+		storage.ErrMissingPostFields:    ErrMissingPostFields,
+		storage.ErrCommentNotFound:      ErrCommentNotFound,
+		storage.ErrMissingCommentFields: ErrMissingCommentFields,
 	}
 )
 
 type Server struct {
-	storage services.Storage
+	storage storage.Storage
 	router  *router.Router
 	to      time.Duration
 }
 
-func NewServer(storage services.Storage) *Server {
+func NewServer(storage storage.Storage) *Server {
 	s := &Server{
 		storage: storage,
 		router:  &router.Router{},
@@ -247,7 +246,7 @@ func (s *Server) getCommentsHandler(w router.ResponseWriter, r *router.Request) 
 		s.writeResponse(w, nil, err)
 		return
 	}
-	s.writeResponse(w, comments, nil)
+	s.writeResponse(w, []entities.Comment{*comments}, nil)
 }
 
 func (s *Server) getPostCommentHandler(w router.ResponseWriter, r *router.Request) {
