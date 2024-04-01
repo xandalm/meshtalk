@@ -30,7 +30,7 @@ func NewStorage() *Storage {
 
 func (s *Storage) GetPost(id string) (*entities.Post, error) {
 	found, ok := s.posts[id]
-	if !ok || found.DeletedAt == "" {
+	if !ok || found.DeletedAt != "" {
 		return nil, nil
 	}
 	return &entities.Post{
@@ -107,7 +107,7 @@ func (s *Storage) GetComments(post string) ([]entities.Comment, error) {
 		var res []entities.Comment
 		for _, comments := range s.comments {
 			for _, comment := range comments {
-				if comment.DeletedAt != "" {
+				if comment.DeletedAt == "" {
 					res = append(res, comment)
 				}
 			}

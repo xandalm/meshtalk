@@ -98,20 +98,22 @@ func (s *Server) SetTimeout(duration time.Duration) error {
 }
 
 func (s *Server) writeResponse(w http.ResponseWriter, data any, err error) {
-	if e, ok := mErrors[err]; ok {
-		err = e
-	}
-	switch err {
-	case ErrPostNotFound,
-		ErrCommentNotFound:
-		w.WriteHeader(http.StatusNotFound)
-	case ErrMissingPostFields,
-		ErrMissingCommentFields,
-		ErrUnsupportedPost,
-		ErrUnsupportedComment:
-		w.WriteHeader(http.StatusBadRequest)
-	default:
-		w.WriteHeader(http.StatusInternalServerError)
+	if err != nil {
+		if e, ok := mErrors[err]; ok {
+			err = e
+		}
+		switch err {
+		case ErrPostNotFound,
+			ErrCommentNotFound:
+			w.WriteHeader(http.StatusNotFound)
+		case ErrMissingPostFields,
+			ErrMissingCommentFields,
+			ErrUnsupportedPost,
+			ErrUnsupportedComment:
+			w.WriteHeader(http.StatusBadRequest)
+		default:
+			w.WriteHeader(http.StatusInternalServerError)
+		}
 	}
 	writeJSON(
 		w,

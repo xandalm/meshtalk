@@ -4,20 +4,28 @@ import (
 	"encoding/json"
 	"fmt"
 	"meshtalk/adapters/httpserver"
+	"net/http"
 	"reflect"
 	"strings"
 	"testing"
 )
 
 type CreatePostAction interface {
-	CreateAPost(args ...string) (string, error)
+	CreatePost(args ...string) (int, string, error)
 }
 
+type ReadingPostAction interface {
+	ReadPost(id string) (int, string, error)
+}
+
+var keepingPostId string
+
 func SuccessfullyCreatePost(t testing.TB, driver CreatePostAction) {
-	got, err := driver.CreateAPost(`title: "Test Post"`, `content: "Some content"`, `author: "Someone"`)
+	status, got, err := driver.CreatePost(`title: "Test Post"`, `content: "Some content"`, `author: "Someone"`)
 	if err != nil {
 		t.Errorf("failed specification test, %v", err)
 	}
+	assertHTTPStatus(t, status, http.StatusCreated)
 	want := map[string]any{
 		"title":   "Test Post",
 		"content": "Some content",
@@ -32,6 +40,11 @@ func SuccessfullyCreatePost(t testing.TB, driver CreatePostAction) {
 		t.Fatalf("didn't get expected data type")
 	}
 	assertPostsCanBeTheSame(t, data, want)
+	id, ok := data["id"]
+	if !ok {
+		t.Error("doesn't contain id in data")
+	}
+	keepingPostId = id.(string)
 }
 
 func UnableToCreatePostDueToMissingRequiredValues(t testing.TB, driver CreatePostAction) {
@@ -45,10 +58,11 @@ func UnableToCreatePostDueToMissingRequiredValues(t testing.TB, driver CreatePos
 		{`title: "Test Post"`, `author: "Someone"`},
 	}
 	for _, c := range cases {
-		got, err := driver.CreateAPost(c...)
+		status, got, err := driver.CreatePost(c...)
 		if err != nil {
-			t.Errorf("failed specification test, %v", err)
+			t.Fatalf("failed specification test, %v", err)
 		}
+		assertHTTPStatus(t, status, http.StatusBadRequest)
 		want := map[string]any{
 			"name":    httpserver.ErrMissingPostFields.Name,
 			"message": httpserver.ErrMissingPostFields.Message,
@@ -64,6 +78,29 @@ func UnableToCreatePostDueToMissingRequiredValues(t testing.TB, driver CreatePos
 	}
 }
 
+func SuccessfullyReadPost(t testing.TB, driver ReadingPostAction) {
+	status, got, err := driver.ReadPost(keepingPostId)
+	if err != nil {
+		t.Errorf("failed specification test, %v", err)
+	}
+	assertHTTPStatus(t, status, http.StatusOK)
+	want := map[string]any{
+		"id":      keepingPostId,
+		"title":   "Test Post",
+		"content": "Some content",
+		"author":  "Someone",
+	}
+	v := decodeByJSON(t, got)
+	json, _ := v.(map[string]any)
+	assertJSONHasNoError(t, json)
+	assertJSONHasData(t, json)
+	data, ok := json["data"].(map[string]any)
+	if !ok {
+		t.Fatalf("didn't get expected data type")
+	}
+	assertPostsCanBeTheSame(t, data, want)
+}
+
 func decodeByJSON(t testing.TB, got string) any {
 	t.Helper()
 
@@ -72,6 +109,14 @@ func decodeByJSON(t testing.TB, got string) any {
 		t.Fatalf("unable to decode response payload")
 	}
 	return v
+}
+
+func assertHTTPStatus(t testing.TB, got, want int) {
+	t.Helper()
+
+	if got != want {
+		t.Fatalf("got status %d, but want %d", got, want)
+	}
 }
 
 func assertJSONHasError(t testing.TB, got map[string]any) {

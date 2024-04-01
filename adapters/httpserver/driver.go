@@ -38,7 +38,7 @@ type Driver struct {
 	Client  *http.Client
 }
 
-func (d *Driver) CreateAPost(args ...string) (string, error) {
+func (d *Driver) CreatePost(args ...string) (int, string, error) {
 	_args := ParseArgs(args...)
 
 	var body io.Reader
@@ -52,14 +52,34 @@ func (d *Driver) CreateAPost(args ...string) (string, error) {
 		body = strings.NewReader("{}")
 	}
 
-	res, err := d.Client.Post(d.BaseURL+"/posts", "json", body)
-	if err != nil {
-		return "", err
-	}
+	return d.doPost(d.BaseURL+"/posts", "json", body)
+}
+
+func (d *Driver) ReadPost(id string) (int, string, error) {
+	return d.doGet(d.BaseURL + "/posts/" + id)
+}
+
+func (d *Driver) handleWithResponse(res *http.Response) (int, string, error) {
 	defer res.Body.Close()
 	data, err := io.ReadAll(res.Body)
 	if err != nil {
-		return "", err
+		return 0, "", err
 	}
-	return string(data), nil
+	return res.StatusCode, string(data), nil
+}
+
+func (d *Driver) doPost(url, contentType string, body io.Reader) (int, string, error) {
+	res, err := d.Client.Post(url, contentType, body)
+	if err != nil {
+		return 0, "", err
+	}
+	return d.handleWithResponse(res)
+}
+
+func (d *Driver) doGet(url string) (int, string, error) {
+	res, err := d.Client.Get(url)
+	if err != nil {
+		return 0, "", err
+	}
+	return d.handleWithResponse(res)
 }

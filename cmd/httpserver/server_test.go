@@ -44,5 +44,5 @@ func TestServer(t *testing.T) {
 
 	specifications.SuccessfullyCreatePost(t, driver)
 	specifications.UnableToCreatePostDueToMissingRequiredValues(t, driver)
-
+	specifications.SuccessfullyReadPost(t, driver)
 }
