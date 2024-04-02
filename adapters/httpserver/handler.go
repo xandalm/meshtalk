@@ -80,6 +80,7 @@ func NewServer(storage storage.Storage) *Server {
 
 	s.router.GetFunc("/posts/{pid}/comments/{cid}", s.getPostCommentHandler)
 	s.router.PutFunc("/posts/{pid}/comments/{cid}", s.editPostCommentHandler)
+	s.router.DeleteFunc("/posts/{pid}/comments/{cid}", s.deleteCommentHandler)
 	s.router.GetFunc("/posts/{pid}/comments", s.getPostCommentsHandler)
 	s.router.PostFunc("/posts/{pid}/comments", s.storePostCommentHandler)
 
@@ -326,6 +327,17 @@ func (s *Server) editPostCommentHandler(w router.ResponseWriter, r *router.Reque
 	comment.Id = params["cid"]
 
 	if err := s.storage.EditComment(&comment); err != nil {
+		s.writeResponse(w, nil, err)
+		return
+	}
+
+	w.WriteHeader(http.StatusNoContent)
+}
+
+func (s *Server) deleteCommentHandler(w router.ResponseWriter, r *router.Request) {
+	params := r.Params()
+
+	if err := s.storage.DeleteComment(params["pid"], params["cid"]); err != nil {
 		s.writeResponse(w, nil, err)
 		return
 	}

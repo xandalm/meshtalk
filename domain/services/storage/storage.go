@@ -22,4 +22,5 @@ type Storage interface {
 	GetComment(post, id string) (*entities.Comment, error)
 	StoreComment(comment *entities.Comment) error
 	EditComment(comment *entities.Comment) error
+	DeleteComment(post, id string) error
 }

@@ -170,6 +170,11 @@ func (s *StubStorage) EditComment(comment *entities.Comment) error {
 	return nil
 }
 
+func (s *StubStorage) DeleteComment(post, id string) error {
+	delete(s.comments[post], id)
+	return nil
+}
+
 var errFoo = errors.New("some error")
 
 type StubFailingStorage struct {
@@ -212,16 +217,21 @@ func (s *StubFailingStorage) EditComment(comment *entities.Comment) error {
 	return errFoo
 }
 
+func (s *StubFailingStorage) DeleteComment(post, id string) error {
+	return errFoo
+}
+
 type MockStorage struct {
-	GetPostFunc      func(id string) (*entities.Post, error)
-	GetPostsFunc     func() ([]entities.Post, error)
-	StorePostFunc    func(post *entities.Post) error
-	EditPostFunc     func(post *entities.Post) error
-	DeletePostFunc   func(id string) error
-	GetCommentsFunc  func(post string) ([]entities.Comment, error)
-	GetCommentFunc   func(post, id string) (*entities.Comment, error)
-	StoreCommentFunc func(comment *entities.Comment) error
-	EditCommentFunc  func(comment *entities.Comment) error
+	GetPostFunc       func(id string) (*entities.Post, error)
+	GetPostsFunc      func() ([]entities.Post, error)
+	StorePostFunc     func(post *entities.Post) error
+	EditPostFunc      func(post *entities.Post) error
+	DeletePostFunc    func(id string) error
+	GetCommentsFunc   func(post string) ([]entities.Comment, error)
+	GetCommentFunc    func(post, id string) (*entities.Comment, error)
+	StoreCommentFunc  func(comment *entities.Comment) error
+	EditCommentFunc   func(comment *entities.Comment) error
+	DeleteCommentFunc func(post, id string) error
 }
 
 func (s *MockStorage) GetPost(id string) (*entities.Post, error) {
@@ -258,6 +268,10 @@ func (s *MockStorage) StoreComment(comment *entities.Comment) error {
 
 func (s *MockStorage) EditComment(comment *entities.Comment) error {
 	return s.EditCommentFunc(comment)
+}
+
+func (s *MockStorage) DeleteComment(post, id string) error {
+	return s.DeleteCommentFunc(post, id)
 }
 
 func TestGETPosts(t *testing.T) {
@@ -867,6 +881,52 @@ func TestPUTComments(t *testing.T) {
 	})
 }
 
+func TestDELETEComments(t *testing.T) {
+	storage := &StubStorage{
+		posts: map[string]entities.Post{
+			"1": {
+				Id:        "1",
+				Title:     "Post 1",
+				Content:   "Post Content",
+				Author:    "Alex",
+				CreatedAt: newDate(2023, time.December, 4, 16, 30, 30, 100),
+			},
+		},
+		comments: map[string]map[string]entities.Comment{
+			"1": {
+				"1": {
+					Id:        "1",
+					Post:      "1",
+					Content:   "Some comment",
+					Author:    "Alexandre",
+					CreatedAt: newDate(2024, time.January, 23, 12, 30, 30, 100),
+				},
+				"2": {
+					Id:        "2",
+					Post:      "1",
+					Content:   "Some comment",
+					Author:    "João",
+					CreatedAt: newDate(2024, time.January, 23, 12, 30, 30, 100),
+				},
+			},
+		},
+	}
+	server := NewServer(storage)
+
+	t.Run("returns 204", func(t *testing.T) {
+		request := newDeleteCommentRequest("1", "2")
+		response := httptest.NewRecorder()
+
+		server.ServeHTTP(response, request)
+
+		assertStatus(t, response, http.StatusNoContent)
+
+		if _, ok := storage.comments["1"]["2"]; ok {
+			t.Errorf("expected that the comment was deleted, but it was not")
+		}
+	})
+}
+
 func TestServerTimeout(t *testing.T) {
 	t.Run("returns 408 when reaches server timeout", func(t *testing.T) {
 		storage := &MockStorage{
@@ -941,6 +1001,11 @@ func newStoreCommentRequest(post, jsonRaw string) *http.Request {
 
 func newEditCommentRequest(postId, commentId, jsonRaw string) *http.Request {
 	req, _ := http.NewRequest(http.MethodPut, "/posts/"+postId+"/comments/"+commentId, strings.NewReader(jsonRaw))
+	return req
+}
+
+func newDeleteCommentRequest(postId, commentId string) *http.Request {
+	req, _ := http.NewRequest(http.MethodDelete, "/posts/"+postId+"/comments/"+commentId, nil)
 	return req
 }
 
