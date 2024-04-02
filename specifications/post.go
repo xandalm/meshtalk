@@ -75,6 +75,18 @@ func SuccessfullyReadPost(t testing.TB, driver ReadingPostAction) {
 	assertPostsCanBeTheSame(t, data, want)
 }
 
+func TryToReadPostButCannotFindIt(t testing.TB, driver ReadingPostAction) {
+	status, got, err := driver.ReadPost("2")
+	assertNoError(t, err)
+	assertHTTPStatus(t, status, http.StatusNotFound)
+	want := map[string]any{
+		"name":    httpserver.ErrPostNotFound.Name,
+		"message": httpserver.ErrPostNotFound.Message,
+	}
+	e := extractError(t, got)
+	assertGotError(t, e, want)
+}
+
 func extractData(t testing.TB, src string) map[string]any {
 	t.Helper()
 
