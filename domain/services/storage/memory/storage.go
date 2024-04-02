@@ -1,6 +1,7 @@
 package memory
 
 import (
+	"fmt"
 	"meshtalk/domain/entities"
 	"meshtalk/domain/services/storage"
 	"strconv"
@@ -164,4 +165,8 @@ func (s *Storage) EditComment(c *entities.Comment) error {
 		}
 	}
 	return storage.ErrCommentNotFound
+}
+
+func (s *Storage) DeleteComment(post, id string) error {
+	return fmt.Errorf("not implemented")
 }

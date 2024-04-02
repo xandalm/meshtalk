@@ -171,7 +171,11 @@ func (s *StubStorage) EditComment(comment *entities.Comment) error {
 }
 
 func (s *StubStorage) DeleteComment(post, id string) error {
-	delete(s.comments[post], id)
+	comments, ok := s.comments[post]
+	if !ok {
+		return ErrPostNotFound
+	}
+	delete(comments, id)
 	return nil
 }
 
@@ -924,6 +928,20 @@ func TestDELETEComments(t *testing.T) {
 		if _, ok := storage.comments["1"]["2"]; ok {
 			t.Errorf("expected that the comment was deleted, but it was not")
 		}
+	})
+
+	t.Run("returns 404 and a not found post error", func(t *testing.T) {
+		request := newDeleteCommentRequest("2", "2")
+		response := httptest.NewRecorder()
+
+		server.ServeHTTP(response, request)
+
+		assertStatus(t, response, http.StatusNotFound)
+
+		got := getErrorFromResponseModel(t, response.Body)
+		want := ErrPostNotFound
+
+		assertGotError(t, got, want)
 	})
 }
 
