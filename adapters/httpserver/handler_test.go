@@ -943,6 +943,17 @@ func TestDELETEComments(t *testing.T) {
 
 		assertGotError(t, got, want)
 	})
+
+	t.Run("returns 500", func(t *testing.T) {
+		storage := &StubFailingStorage{}
+		server := NewServer(storage)
+		request := newDeleteCommentRequest("1", "1")
+		response := httptest.NewRecorder()
+
+		server.ServeHTTP(response, request)
+
+		assertStatus(t, response, http.StatusInternalServerError)
+	})
 }
 
 func TestServerTimeout(t *testing.T) {
