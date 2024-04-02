@@ -152,7 +152,7 @@ func (s *Server) storePostHandler(w router.ResponseWriter, r *router.Request) {
 		return
 	}
 
-	if err := s.storage.StorePost(&post); err != nil {
+	if err := s.storage.CreatePost(&post); err != nil {
 		s.writeResponse(w, nil, err)
 		return
 	}
@@ -305,7 +305,7 @@ func (s *Server) storePostCommentHandler(w router.ResponseWriter, r *router.Requ
 
 	comment.Post = pid
 
-	if err := s.storage.StoreComment(&comment); err != nil {
+	if err := s.storage.CreateComment(&comment); err != nil {
 		s.writeResponse(w, nil, err)
 		return
 	}

@@ -15,12 +15,12 @@ var (
 type Storage interface {
 	GetPost(id string) (*entities.Post, error)
 	GetPosts() ([]entities.Post, error)
-	StorePost(post *entities.Post) error
+	CreatePost(post *entities.Post) error
 	EditPost(post *entities.Post) error
 	DeletePost(id string) error
 	GetComments(post string) ([]entities.Comment, error)
 	GetComment(post, id string) (*entities.Comment, error)
-	StoreComment(comment *entities.Comment) error
+	CreateComment(comment *entities.Comment) error
 	EditComment(comment *entities.Comment) error
 	DeleteComment(post, id string) error
 }

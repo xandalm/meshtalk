@@ -56,7 +56,7 @@ func timeToString(t time.Time) string {
 	return str
 }
 
-func (s *Storage) StorePost(post *entities.Post) error {
+func (s *Storage) CreatePost(post *entities.Post) error {
 
 	if post.Title == "" || post.Content == "" || post.Author == "" {
 		return storage.ErrMissingPostFields
@@ -130,7 +130,7 @@ func (s *Storage) GetComment(post, comment string) (*entities.Comment, error) {
 	return nil, storage.ErrPostNotFound
 }
 
-func (s *Storage) StoreComment(c *entities.Comment) error {
+func (s *Storage) CreateComment(c *entities.Comment) error {
 
 	if c.Content == "" || c.Author == "" {
 		return storage.ErrMissingCommentFields

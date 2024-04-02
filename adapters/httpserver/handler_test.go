@@ -57,7 +57,7 @@ func (s *StubStorage) GetPosts() ([]entities.Post, error) {
 	return posts, nil
 }
 
-func (s *StubStorage) StorePost(post *entities.Post) error {
+func (s *StubStorage) CreatePost(post *entities.Post) error {
 	if post.Title == "" || post.Content == "" || post.Author == "" {
 		return storage.ErrMissingPostFields
 	}
@@ -134,7 +134,7 @@ func (s *StubStorage) GetComment(post, id string) (*entities.Comment, error) {
 	}, nil
 }
 
-func (s *StubStorage) StoreComment(comment *entities.Comment) error {
+func (s *StubStorage) CreateComment(comment *entities.Comment) error {
 	if comment.Author == "" || comment.Content == "" {
 		return storage.ErrMissingCommentFields
 	}
@@ -193,7 +193,7 @@ func (s *StubFailingStorage) GetPosts() ([]entities.Post, error) {
 	return nil, errFoo
 }
 
-func (s *StubFailingStorage) StorePost(post *entities.Post) error {
+func (s *StubFailingStorage) CreatePost(post *entities.Post) error {
 	return errFoo
 }
 
@@ -213,7 +213,7 @@ func (s *StubFailingStorage) GetComment(post, id string) (*entities.Comment, err
 	return nil, errFoo
 }
 
-func (s *StubFailingStorage) StoreComment(comment *entities.Comment) error {
+func (s *StubFailingStorage) CreateComment(comment *entities.Comment) error {
 	return errFoo
 }
 
@@ -228,12 +228,12 @@ func (s *StubFailingStorage) DeleteComment(post, id string) error {
 type MockStorage struct {
 	GetPostFunc       func(id string) (*entities.Post, error)
 	GetPostsFunc      func() ([]entities.Post, error)
-	StorePostFunc     func(post *entities.Post) error
+	CreatePostFunc    func(post *entities.Post) error
 	EditPostFunc      func(post *entities.Post) error
 	DeletePostFunc    func(id string) error
 	GetCommentsFunc   func(post string) ([]entities.Comment, error)
 	GetCommentFunc    func(post, id string) (*entities.Comment, error)
-	StoreCommentFunc  func(comment *entities.Comment) error
+	CreateCommentFunc func(comment *entities.Comment) error
 	EditCommentFunc   func(comment *entities.Comment) error
 	DeleteCommentFunc func(post, id string) error
 }
@@ -246,8 +246,8 @@ func (s *MockStorage) GetPosts() ([]entities.Post, error) {
 	return s.GetPostsFunc()
 }
 
-func (s *MockStorage) StorePost(post *entities.Post) error {
-	return s.StorePostFunc(post)
+func (s *MockStorage) CreatePost(post *entities.Post) error {
+	return s.CreatePostFunc(post)
 }
 
 func (s *MockStorage) EditPost(post *entities.Post) error {
@@ -266,8 +266,8 @@ func (s *MockStorage) GetComment(post, id string) (*entities.Comment, error) {
 	return s.GetCommentFunc(post, id)
 }
 
-func (s *MockStorage) StoreComment(comment *entities.Comment) error {
-	return s.StoreCommentFunc(comment)
+func (s *MockStorage) CreateComment(comment *entities.Comment) error {
+	return s.CreateCommentFunc(comment)
 }
 
 func (s *MockStorage) EditComment(comment *entities.Comment) error {
@@ -371,8 +371,8 @@ func TestPOSTPosts(t *testing.T) {
 	storage := NewStubStorage()
 	server := NewServer(storage)
 
-	t.Run(`returns 201 and post after store post`, func(t *testing.T) {
-		request := newStorePostRequest(`{"title": "Post X", "content": "Post Content", "author": "Alex"}`)
+	t.Run(`returns 201 and post after create post`, func(t *testing.T) {
+		request := newCreatePostRequest(`{"title": "Post X", "content": "Post Content", "author": "Alex"}`)
 		response := httptest.NewRecorder()
 
 		server.ServeHTTP(response, request)
@@ -389,7 +389,7 @@ func TestPOSTPosts(t *testing.T) {
 		}
 
 		if _, ok := storage.posts["1"]; !ok {
-			t.Fatal("didn't stores the post")
+			t.Fatal("didn't creates the post")
 		}
 
 		if got.Id != want.Id || got.Title != want.Title || got.Content != want.Content || got.Author != want.Author {
@@ -410,7 +410,7 @@ func TestPOSTPosts(t *testing.T) {
 	t.Run("returns 400 when request with incompatible json data", func(t *testing.T) {
 
 		t.Run("returns 400 and unsupported error", func(t *testing.T) {
-			request := newStorePostRequest(`data`)
+			request := newCreatePostRequest(`data`)
 			response := httptest.NewRecorder()
 
 			server.ServeHTTP(response, request)
@@ -423,7 +423,7 @@ func TestPOSTPosts(t *testing.T) {
 			assertGotError(t, got, want)
 		})
 		t.Run("returns 400 and missing fields error", func(t *testing.T) {
-			request := newStorePostRequest(`{}`)
+			request := newCreatePostRequest(`{}`)
 			response := httptest.NewRecorder()
 
 			server.ServeHTTP(response, request)
@@ -441,7 +441,7 @@ func TestPOSTPosts(t *testing.T) {
 		storage := &StubFailingStorage{}
 		server := NewServer(storage)
 
-		request := newStorePostRequest(`{"title": "Post X", "content": "Post Content", "author": "Alex"}`)
+		request := newCreatePostRequest(`{"title": "Post X", "content": "Post Content", "author": "Alex"}`)
 		response := httptest.NewRecorder()
 
 		server.ServeHTTP(response, request)
@@ -728,8 +728,8 @@ func TestPOSTComments(t *testing.T) {
 	}
 	server := NewServer(storage)
 
-	t.Run(`returns 201 and comment after store comment`, func(t *testing.T) {
-		request := newStoreCommentRequest("1", `{"content": "Comment Content", "author": "Alex"}`)
+	t.Run(`returns 201 and comment after create comment`, func(t *testing.T) {
+		request := newCreateCommentRequest("1", `{"content": "Comment Content", "author": "Alex"}`)
 		response := httptest.NewRecorder()
 
 		server.ServeHTTP(response, request)
@@ -750,7 +750,7 @@ func TestPOSTComments(t *testing.T) {
 		}
 
 		if _, ok := comments["1"]; !ok {
-			t.Fatal("didn't stores the comment")
+			t.Fatal("didn't creates the comment")
 		}
 
 		if got.Id != want.Id || got.Post != want.Post || got.Content != want.Content || got.Author != want.Author {
@@ -769,7 +769,7 @@ func TestPOSTComments(t *testing.T) {
 	})
 
 	t.Run("returns 404", func(t *testing.T) {
-		request := newStoreCommentRequest("3", `{"content": "Comment Content", "author": "Alex"}`)
+		request := newCreateCommentRequest("3", `{"content": "Comment Content", "author": "Alex"}`)
 		response := httptest.NewRecorder()
 
 		server.ServeHTTP(response, request)
@@ -785,7 +785,7 @@ func TestPOSTComments(t *testing.T) {
 	t.Run("returns 400", func(t *testing.T) {
 
 		t.Run("unsupported data", func(t *testing.T) {
-			request := newStoreCommentRequest("1", `data`)
+			request := newCreateCommentRequest("1", `data`)
 			response := httptest.NewRecorder()
 
 			server.ServeHTTP(response, request)
@@ -799,7 +799,7 @@ func TestPOSTComments(t *testing.T) {
 		})
 
 		t.Run("missing fields error", func(t *testing.T) {
-			request := newStoreCommentRequest("1", `{}`)
+			request := newCreateCommentRequest("1", `{}`)
 			response := httptest.NewRecorder()
 
 			server.ServeHTTP(response, request)
@@ -987,7 +987,7 @@ func newGetPostRequest(id string) *http.Request {
 	return req
 }
 
-func newStorePostRequest(jsonRaw string) *http.Request {
+func newCreatePostRequest(jsonRaw string) *http.Request {
 	req, _ := http.NewRequest(http.MethodPost, "/posts", strings.NewReader(jsonRaw))
 	return req
 }
@@ -1023,7 +1023,7 @@ func newGetPostCommentsRequest(postId, commentId string) *http.Request {
 	return req
 }
 
-func newStoreCommentRequest(post, jsonRaw string) *http.Request {
+func newCreateCommentRequest(post, jsonRaw string) *http.Request {
 	req, _ := http.NewRequest(http.MethodPost, "/posts/"+post+"/comments", strings.NewReader(jsonRaw))
 	return req
 }
