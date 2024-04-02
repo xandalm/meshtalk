@@ -22,23 +22,14 @@ var keepingPostId string
 
 func SuccessfullyCreatePost(t testing.TB, driver CreatePostAction) {
 	status, got, err := driver.CreatePost(`title: "Test Post"`, `content: "Some content"`, `author: "Someone"`)
-	if err != nil {
-		t.Errorf("failed specification test, %v", err)
-	}
+	assertNoError(t, err)
 	assertHTTPStatus(t, status, http.StatusCreated)
 	want := map[string]any{
 		"title":   "Test Post",
 		"content": "Some content",
 		"author":  "Someone",
 	}
-	v := decodeByJSON(t, got)
-	json, _ := v.(map[string]any)
-	assertJSONHasNoError(t, json)
-	assertJSONHasData(t, json)
-	data, ok := json["data"].(map[string]any)
-	if !ok {
-		t.Fatalf("didn't get expected data type")
-	}
+	data := extractData(t, got)
 	assertPostsCanBeTheSame(t, data, want)
 	id, ok := data["id"]
 	if !ok {
@@ -59,30 +50,20 @@ func UnableToCreatePostDueToMissingRequiredValues(t testing.TB, driver CreatePos
 	}
 	for _, c := range cases {
 		status, got, err := driver.CreatePost(c...)
-		if err != nil {
-			t.Fatalf("failed specification test, %v", err)
-		}
+		assertNoError(t, err)
 		assertHTTPStatus(t, status, http.StatusBadRequest)
 		want := map[string]any{
 			"name":    httpserver.ErrMissingPostFields.Name,
 			"message": httpserver.ErrMissingPostFields.Message,
 		}
-		v := decodeByJSON(t, got)
-		json, _ := v.(map[string]any)
-		assertJSONHasError(t, json)
-		e, ok := json["error"].(map[string]any)
-		if !ok {
-			t.Fatal("didn't get expected error type")
-		}
+		e := extractError(t, got)
 		assertGotError(t, e, want)
 	}
 }
 
 func SuccessfullyReadPost(t testing.TB, driver ReadingPostAction) {
 	status, got, err := driver.ReadPost(keepingPostId)
-	if err != nil {
-		t.Errorf("failed specification test, %v", err)
-	}
+	assertNoError(t, err)
 	assertHTTPStatus(t, status, http.StatusOK)
 	want := map[string]any{
 		"id":      keepingPostId,
@@ -90,7 +71,14 @@ func SuccessfullyReadPost(t testing.TB, driver ReadingPostAction) {
 		"content": "Some content",
 		"author":  "Someone",
 	}
-	v := decodeByJSON(t, got)
+	data := extractData(t, got)
+	assertPostsCanBeTheSame(t, data, want)
+}
+
+func extractData(t testing.TB, src string) map[string]any {
+	t.Helper()
+
+	v := decodeByJSON(t, src)
 	json, _ := v.(map[string]any)
 	assertJSONHasNoError(t, json)
 	assertJSONHasData(t, json)
@@ -98,7 +86,18 @@ func SuccessfullyReadPost(t testing.TB, driver ReadingPostAction) {
 	if !ok {
 		t.Fatalf("didn't get expected data type")
 	}
-	assertPostsCanBeTheSame(t, data, want)
+	return data
+}
+
+func extractError(t testing.TB, src string) map[string]any {
+	v := decodeByJSON(t, src)
+	json, _ := v.(map[string]any)
+	assertJSONHasError(t, json)
+	err, ok := json["error"].(map[string]any)
+	if !ok {
+		t.Fatal("didn't get expected error type")
+	}
+	return err
 }
 
 func decodeByJSON(t testing.TB, got string) any {
@@ -109,6 +108,14 @@ func decodeByJSON(t testing.TB, got string) any {
 		t.Fatalf("unable to decode response payload")
 	}
 	return v
+}
+
+func assertNoError(t testing.TB, got error) {
+	t.Helper()
+
+	if got != nil {
+		t.Fatalf("expected no error but get one, %v", got)
+	}
 }
 
 func assertHTTPStatus(t testing.TB, got, want int) {
