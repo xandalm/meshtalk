@@ -18,6 +18,7 @@ import (
 )
 
 type StubStorage struct {
+	customers        map[string]entities.Customer
 	posts            map[string]entities.Post
 	comments         map[string]map[string]entities.Comment
 	postEditCalls    []string
@@ -26,6 +27,7 @@ type StubStorage struct {
 
 func NewStubStorage() *StubStorage {
 	return &StubStorage{
+		map[string]entities.Customer{},
 		map[string]entities.Post{},
 		map[string]map[string]entities.Comment{},
 		[]string{},
@@ -179,6 +181,13 @@ func (s *StubStorage) DeleteComment(post, id string) error {
 	return nil
 }
 
+func (s *StubStorage) CreateCustomer(customer *entities.Customer) error {
+	customer.Id = strconv.Itoa(len(s.customers) + 1)
+	customer.CreatedAt = timeToString(time.Now())
+	s.customers[customer.Id] = *customer
+	return nil
+}
+
 var errFoo = errors.New("some error")
 
 type StubFailingStorage struct {
@@ -225,17 +234,22 @@ func (s *StubFailingStorage) DeleteComment(post, id string) error {
 	return errFoo
 }
 
+func (s *StubFailingStorage) CreateCustomer(customer *entities.Customer) error {
+	return errFoo
+}
+
 type MockStorage struct {
-	GetPostFunc       func(id string) (*entities.Post, error)
-	GetPostsFunc      func() ([]entities.Post, error)
-	CreatePostFunc    func(post *entities.Post) error
-	EditPostFunc      func(post *entities.Post) error
-	DeletePostFunc    func(id string) error
-	GetCommentsFunc   func(post string) ([]entities.Comment, error)
-	GetCommentFunc    func(post, id string) (*entities.Comment, error)
-	CreateCommentFunc func(comment *entities.Comment) error
-	EditCommentFunc   func(comment *entities.Comment) error
-	DeleteCommentFunc func(post, id string) error
+	GetPostFunc        func(id string) (*entities.Post, error)
+	GetPostsFunc       func() ([]entities.Post, error)
+	CreatePostFunc     func(post *entities.Post) error
+	EditPostFunc       func(post *entities.Post) error
+	DeletePostFunc     func(id string) error
+	GetCommentsFunc    func(post string) ([]entities.Comment, error)
+	GetCommentFunc     func(post, id string) (*entities.Comment, error)
+	CreateCommentFunc  func(comment *entities.Comment) error
+	EditCommentFunc    func(comment *entities.Comment) error
+	DeleteCommentFunc  func(post, id string) error
+	CreateCustomerFunc func(customer *entities.Customer) error
 }
 
 func (s *MockStorage) GetPost(id string) (*entities.Post, error) {
@@ -276,6 +290,10 @@ func (s *MockStorage) EditComment(comment *entities.Comment) error {
 
 func (s *MockStorage) DeleteComment(post, id string) error {
 	return s.DeleteCommentFunc(post, id)
+}
+
+func (s *MockStorage) CreateCustomer(customer *entities.Customer) error {
+	return s.CreateCustomerFunc(customer)
 }
 
 func TestGETPosts(t *testing.T) {
@@ -956,6 +974,39 @@ func TestDELETEComments(t *testing.T) {
 	})
 }
 
+func TestPOSTCustomers(t *testing.T) {
+	storage := NewStubStorage()
+	server := NewServer(storage)
+
+	request, _ := http.NewRequest(http.MethodPost, "/customers", strings.NewReader(`{"name": "Marie"}`))
+	response := httptest.NewRecorder()
+
+	server.ServeHTTP(response, request)
+
+	assertStatus(t, response, http.StatusCreated)
+
+	if _, ok := storage.customers["1"]; !ok {
+		t.Errorf("didn't creates the customer")
+	}
+
+	want := entities.Customer{
+		Id:   "1",
+		Name: "Marie",
+	}
+
+	got := getCustomerFromResponseModel(t, response.Body)
+
+	if got.Id != want.Id || got.Name != want.Name {
+		t.Errorf(
+			`did not get expected comment, got {Id="%s", Name="%s"} want {Id="%s", Name="%s"}`,
+			got.Id,
+			got.Name,
+			want.Id,
+			want.Name,
+		)
+	}
+}
+
 func TestServerTimeout(t *testing.T) {
 	t.Run("returns 408 when reaches server timeout", func(t *testing.T) {
 		storage := &MockStorage{
@@ -1140,7 +1191,21 @@ func getCommentFromResponseModel(t *testing.T, body io.Reader) entities.Comment 
 
 	var c entities.Comment
 	if err := json.NewDecoder(bytes.NewReader(data)).Decode(&c); err != nil {
-		t.Fatalf("unable to parse data into comments list, %v", err)
+		t.Fatalf("unable to parse data from ResponseModel into Comment, %v", err)
+	}
+
+	return c
+}
+
+func getCustomerFromResponseModel(t *testing.T, body io.Reader) entities.Customer {
+	t.Helper()
+
+	responseModel := getResponseModelFromResponse(t, body)
+	data, _ := json.Marshal(responseModel.Data)
+
+	var c entities.Customer
+	if err := json.NewDecoder(bytes.NewReader(data)).Decode(&c); err != nil {
+		t.Fatalf("unable to parse data from ResponseModel into Customer, %v", err)
 	}
 
 	return c

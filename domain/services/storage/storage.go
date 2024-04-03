@@ -13,6 +13,7 @@ var (
 )
 
 type Storage interface {
+	CreateCustomer(customer *entities.Customer) error
 	GetPost(id string) (*entities.Post, error)
 	GetPosts() ([]entities.Post, error)
 	CreatePost(post *entities.Post) error

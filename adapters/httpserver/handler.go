@@ -72,17 +72,19 @@ func NewServer(storage storage.Storage) *Server {
 		to:      time.Minute,
 	}
 
+	s.router.PostFunc("/customers", s.createCustomer)
+
 	s.router.GetFunc("/posts/{id}", s.getPostHandler)
 	s.router.PutFunc("/posts/{id}", s.editPostHandler)
 	s.router.DeleteFunc("/posts/{id}", s.deletePostHandler)
 	s.router.GetFunc("/posts", s.getPostsHandler)
-	s.router.PostFunc("/posts", s.storePostHandler)
+	s.router.PostFunc("/posts", s.createPostHandler)
 
 	s.router.GetFunc("/posts/{pid}/comments/{cid}", s.getPostCommentHandler)
 	s.router.PutFunc("/posts/{pid}/comments/{cid}", s.editPostCommentHandler)
 	s.router.DeleteFunc("/posts/{pid}/comments/{cid}", s.deleteCommentHandler)
 	s.router.GetFunc("/posts/{pid}/comments", s.getPostCommentsHandler)
-	s.router.PostFunc("/posts/{pid}/comments", s.storePostCommentHandler)
+	s.router.PostFunc("/posts/{pid}/comments", s.createPostCommentHandler)
 
 	s.router.GetFunc("/comments", s.getCommentsHandler)
 
@@ -144,7 +146,25 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-func (s *Server) storePostHandler(w router.ResponseWriter, r *router.Request) {
+func (s *Server) createCustomer(w router.ResponseWriter, r *router.Request) {
+	var customer entities.Customer
+	if err := r.ParseBodyInto(&customer); err != nil {
+		s.writeResponse(w, nil, err)
+		return
+	}
+	if err := s.storage.CreateCustomer(&customer); err != nil {
+		s.writeResponse(w, nil, err)
+		return
+	}
+	w.WriteHeader(http.StatusCreated)
+	s.writeResponse(
+		w,
+		customer,
+		nil,
+	)
+}
+
+func (s *Server) createPostHandler(w router.ResponseWriter, r *router.Request) {
 	var post entities.Post
 	err := r.ParseBodyInto(&post)
 	if err != nil {
@@ -292,7 +312,7 @@ func (s *Server) getPostCommentsHandler(w router.ResponseWriter, r *router.Reque
 	s.writeResponse(w, comments, nil)
 }
 
-func (s *Server) storePostCommentHandler(w router.ResponseWriter, r *router.Request) {
+func (s *Server) createPostCommentHandler(w router.ResponseWriter, r *router.Request) {
 	pid := r.Params()["pid"]
 
 	var comment entities.Comment
