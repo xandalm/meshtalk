@@ -752,6 +752,17 @@ func TestPOSTCustomers(t *testing.T) {
 
 		assertGotError(t, got, want)
 	})
+
+	t.Run("returns 500 on unexpected error", func(t *testing.T) {
+		server := NewServer(&stubFailingStorage{})
+
+		request := newCreateCustomerRequest(`{"name": "Marie"}`)
+		response := httptest.NewRecorder()
+
+		server.ServeHTTP(response, request)
+
+		assertStatus(t, response, http.StatusInternalServerError)
+	})
 }
 
 func TestServerTimeout(t *testing.T) {
