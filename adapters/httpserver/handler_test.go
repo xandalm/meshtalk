@@ -7,7 +7,6 @@ import (
 	"meshtalk/domain/entities"
 	"net/http"
 	"net/http/httptest"
-	"reflect"
 	"strings"
 	"testing"
 	"time"
@@ -389,9 +388,10 @@ func TestGETComments(t *testing.T) {
 			got := getCommentFromResponseModel(t, response.Body)
 			want := storage.comments["1"]["2"]
 
-			if !reflect.DeepEqual(got, want) {
-				t.Errorf("got comment %v, but want %v", got, want)
-			}
+			assertGotComment(t, got, want)
+			// if !reflect.DeepEqual(got, want) {
+			// 	t.Errorf("got comment %v, but want %v", got, want)
+			// }
 		})
 	})
 
@@ -765,6 +765,34 @@ func TestPOSTCustomers(t *testing.T) {
 	})
 }
 
+func TestGETCustomers(t *testing.T) {
+	storage := &stubStorage{
+		customers: map[string]entities.Customer{
+			"1": {
+				Id:        "1",
+				Name:      "John",
+				CreatedAt: newDate(2024, time.April, 4, 11, 55, 0, 0),
+			},
+		},
+	}
+	server := NewServer(storage)
+
+	t.Run("returns 200 and the customer data", func(t *testing.T) {
+		request := newGetCustomerRequest("1")
+		response := httptest.NewRecorder()
+
+		server.ServeHTTP(response, request)
+
+		assertStatus(t, response, http.StatusOK)
+
+		got := getCustomerFromResponseModel(t, response.Body)
+		want := storage.customers["1"]
+
+		assertGotCustomer(t, got, want)
+	})
+
+}
+
 func TestServerTimeout(t *testing.T) {
 	t.Run("returns 408 when reaches server timeout", func(t *testing.T) {
 		storage := &mockStorage{
@@ -849,6 +877,11 @@ func newDeleteCommentRequest(postId, commentId string) *http.Request {
 
 func newCreateCustomerRequest(jsonRaw string) *http.Request {
 	req, _ := http.NewRequest(http.MethodPost, "/customers", strings.NewReader(jsonRaw))
+	return req
+}
+
+func newGetCustomerRequest(customerId string) *http.Request {
+	req, _ := http.NewRequest(http.MethodGet, "/customers/"+customerId, nil)
 	return req
 }
 

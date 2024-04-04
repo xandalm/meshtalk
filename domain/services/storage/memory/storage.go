@@ -174,3 +174,7 @@ func (s *Storage) DeleteComment(post, id string) error {
 func (s *Storage) CreateCustomer(customer *entities.Customer) error {
 	return fmt.Errorf("not implemented")
 }
+
+func (s *Storage) GetCustomer(id string) (*entities.Customer, error) {
+	return nil, fmt.Errorf("not implemented")
+}

@@ -186,6 +186,20 @@ func (s *stubStorage) CreateCustomer(customer *entities.Customer) error {
 	return nil
 }
 
+func (s *stubStorage) GetCustomer(id string) (*entities.Customer, error) {
+	found, ok := s.customers[id]
+	if !ok {
+		return nil, nil
+	}
+	return &entities.Customer{
+		Id:        found.Id,
+		Name:      found.Name,
+		CreatedAt: found.CreatedAt,
+		UpdatedAt: found.UpdatedAt,
+		DeletedAt: found.DeletedAt,
+	}, nil
+}
+
 var errFoo = errors.New("some error")
 
 type stubFailingStorage struct {
@@ -236,6 +250,10 @@ func (s *stubFailingStorage) CreateCustomer(customer *entities.Customer) error {
 	return errFoo
 }
 
+func (s *stubFailingStorage) GetCustomer(id string) (*entities.Customer, error) {
+	return nil, errFoo
+}
+
 type mockStorage struct {
 	GetPostFunc        func(id string) (*entities.Post, error)
 	GetPostsFunc       func() ([]entities.Post, error)
@@ -248,6 +266,7 @@ type mockStorage struct {
 	EditCommentFunc    func(comment *entities.Comment) error
 	DeleteCommentFunc  func(post, id string) error
 	CreateCustomerFunc func(customer *entities.Customer) error
+	GetCustomerFunc    func(id string) (*entities.Customer, error)
 }
 
 func (s *mockStorage) GetPost(id string) (*entities.Post, error) {
@@ -294,6 +313,10 @@ func (s *mockStorage) CreateCustomer(customer *entities.Customer) error {
 	return s.CreateCustomerFunc(customer)
 }
 
+func (s *mockStorage) GetCustomer(id string) (*entities.Customer, error) {
+	return s.GetCustomerFunc(id)
+}
+
 func assertStatus(t testing.TB, response *httptest.ResponseRecorder, want int) {
 	t.Helper()
 
@@ -302,10 +325,30 @@ func assertStatus(t testing.TB, response *httptest.ResponseRecorder, want int) {
 	}
 }
 
+func isEqual[T comparable](a, b T) bool {
+	return reflect.DeepEqual(a, b)
+}
+
 func assertGotPost(t testing.TB, got, want entities.Post) {
 	t.Helper()
 
-	if !reflect.DeepEqual(got, want) {
+	if !isEqual(got, want) {
+		t.Errorf("wrong post received, got %v but want %v", got, want)
+	}
+}
+
+func assertGotComment(t testing.TB, got, want entities.Comment) {
+	t.Helper()
+
+	if !isEqual(got, want) {
+		t.Errorf("wrong post received, got %v but want %v", got, want)
+	}
+}
+
+func assertGotCustomer(t testing.TB, got, want entities.Customer) {
+	t.Helper()
+
+	if !isEqual(got, want) {
 		t.Errorf("wrong post received, got %v but want %v", got, want)
 	}
 }
@@ -313,7 +356,7 @@ func assertGotPost(t testing.TB, got, want entities.Post) {
 func assertGotError(t testing.TB, got Error, want *Error) {
 	t.Helper()
 
-	if !reflect.DeepEqual(got, *want) {
+	if !isEqual(got, *want) {
 		t.Errorf("got error %q, but want %q", got, *want)
 	}
 }
