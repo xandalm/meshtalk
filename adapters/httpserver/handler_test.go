@@ -3,301 +3,18 @@ package httpserver
 import (
 	"bytes"
 	"encoding/json"
-	"errors"
-	"fmt"
 	"io"
 	"meshtalk/domain/entities"
-	"meshtalk/domain/services/storage"
 	"net/http"
 	"net/http/httptest"
 	"reflect"
-	"strconv"
 	"strings"
 	"testing"
 	"time"
 )
 
-type StubStorage struct {
-	customers        map[string]entities.Customer
-	posts            map[string]entities.Post
-	comments         map[string]map[string]entities.Comment
-	postEditCalls    []string
-	commentEditCalls []string
-}
-
-func NewStubStorage() *StubStorage {
-	return &StubStorage{
-		map[string]entities.Customer{},
-		map[string]entities.Post{},
-		map[string]map[string]entities.Comment{},
-		[]string{},
-		[]string{},
-	}
-}
-
-func (s *StubStorage) GetPost(id string) (*entities.Post, error) {
-	found, ok := s.posts[id]
-	if !ok {
-		return nil, nil
-	}
-	return &entities.Post{
-		Id:        found.Id,
-		Title:     found.Title,
-		Content:   found.Content,
-		Author:    found.Author,
-		CreatedAt: found.CreatedAt,
-		UpdatedAt: found.UpdatedAt,
-		DeletedAt: found.DeletedAt,
-	}, nil
-}
-
-func (s *StubStorage) GetPosts() ([]entities.Post, error) {
-	posts := make([]entities.Post, 0, len(s.posts))
-	for _, post := range s.posts {
-		posts = append(posts, post)
-	}
-	return posts, nil
-}
-
-func (s *StubStorage) CreatePost(post *entities.Post) error {
-	if post.Title == "" || post.Content == "" || post.Author == "" {
-		return storage.ErrMissingPostFields
-	}
-	post.Id = strconv.Itoa(len(s.posts) + 1)
-	post.CreatedAt = timeToString(time.Now())
-	s.posts[post.Id] = *post
-	return nil
-}
-
-func timeToString(t time.Time) string {
-	b, _ := t.UTC().MarshalText()
-	return string(b)
-}
-
-func (s *StubStorage) EditPost(post *entities.Post) error {
-	found, ok := s.posts[post.Id]
-	if !ok {
-		return storage.ErrPostNotFound
-	}
-	if post.Title == "" {
-		post.Title = found.Title
-	}
-	if post.Content == "" {
-		post.Content = found.Content
-	}
-	if post.Author == "" {
-		post.Author = found.Author
-	}
-	s.postEditCalls = append(s.postEditCalls, post.Id)
-	return nil
-}
-
-func (s *StubStorage) DeletePost(id string) error {
-	delete(s.posts, id)
-	return nil
-}
-
-func (s *StubStorage) GetComments(post string) ([]entities.Comment, error) {
-	var res []entities.Comment
-
-	if post != "" {
-		found, ok := s.comments[post]
-		if !ok {
-			return nil, storage.ErrPostNotFound
-		}
-		for _, comment := range found {
-			res = append(res, comment)
-		}
-	} else {
-		for _, comments := range s.comments {
-			for _, comment := range comments {
-				res = append(res, comment)
-			}
-		}
-	}
-
-	return res, nil
-}
-
-func (s *StubStorage) GetComment(post, id string) (*entities.Comment, error) {
-	var found entities.Comment
-	found, ok := s.comments[post][id]
-	if !ok {
-		return nil, nil
-	}
-	return &entities.Comment{
-		Id:        found.Id,
-		Post:      found.Post,
-		Content:   found.Content,
-		Author:    found.Author,
-		CreatedAt: found.CreatedAt,
-		UpdatedAt: found.UpdatedAt,
-		DeletedAt: found.DeletedAt,
-	}, nil
-}
-
-func (s *StubStorage) CreateComment(comment *entities.Comment) error {
-	if comment.Author == "" || comment.Content == "" {
-		return storage.ErrMissingCommentFields
-	}
-	if _, hasPost := s.posts[comment.Post]; !hasPost {
-		return storage.ErrPostNotFound
-	}
-	_, hasComments := s.comments[comment.Post]
-	if !hasComments {
-		s.comments[comment.Post] = make(map[string]entities.Comment)
-	}
-	comment.Id = strconv.Itoa(len(s.comments[comment.Post]) + 1)
-	comment.CreatedAt = timeToString(time.Now())
-	s.comments[comment.Post][comment.Id] = *comment
-	return nil
-}
-
-func (s *StubStorage) EditComment(comment *entities.Comment) error {
-	comments, ok := s.comments[comment.Post]
-	if !ok {
-		return storage.ErrPostNotFound
-	}
-	found, ok := comments[comment.Id]
-	if !ok {
-		return storage.ErrCommentNotFound
-	}
-	if comment.Author == "" {
-		comment.Author = found.Author
-	}
-	if comment.Content == "" {
-		comment.Content = found.Content
-	}
-	s.commentEditCalls = append(s.commentEditCalls, fmt.Sprintf("%+v", comment))
-	return nil
-}
-
-func (s *StubStorage) DeleteComment(post, id string) error {
-	comments, ok := s.comments[post]
-	if !ok {
-		return ErrPostNotFound
-	}
-	delete(comments, id)
-	return nil
-}
-
-func (s *StubStorage) CreateCustomer(customer *entities.Customer) error {
-	customer.Id = strconv.Itoa(len(s.customers) + 1)
-	customer.CreatedAt = timeToString(time.Now())
-	s.customers[customer.Id] = *customer
-	return nil
-}
-
-var errFoo = errors.New("some error")
-
-type StubFailingStorage struct {
-	posts map[string]entities.Post
-}
-
-func (s *StubFailingStorage) GetPost(id string) (*entities.Post, error) {
-	return nil, errFoo
-}
-
-func (s *StubFailingStorage) GetPosts() ([]entities.Post, error) {
-	return nil, errFoo
-}
-
-func (s *StubFailingStorage) CreatePost(post *entities.Post) error {
-	return errFoo
-}
-
-func (s *StubFailingStorage) EditPost(post *entities.Post) error {
-	return errFoo
-}
-
-func (s *StubFailingStorage) DeletePost(id string) error {
-	return errFoo
-}
-
-func (s *StubFailingStorage) GetComments(post string) ([]entities.Comment, error) {
-	return nil, errFoo
-}
-
-func (s *StubFailingStorage) GetComment(post, id string) (*entities.Comment, error) {
-	return nil, errFoo
-}
-
-func (s *StubFailingStorage) CreateComment(comment *entities.Comment) error {
-	return errFoo
-}
-
-func (s *StubFailingStorage) EditComment(comment *entities.Comment) error {
-	return errFoo
-}
-
-func (s *StubFailingStorage) DeleteComment(post, id string) error {
-	return errFoo
-}
-
-func (s *StubFailingStorage) CreateCustomer(customer *entities.Customer) error {
-	return errFoo
-}
-
-type MockStorage struct {
-	GetPostFunc        func(id string) (*entities.Post, error)
-	GetPostsFunc       func() ([]entities.Post, error)
-	CreatePostFunc     func(post *entities.Post) error
-	EditPostFunc       func(post *entities.Post) error
-	DeletePostFunc     func(id string) error
-	GetCommentsFunc    func(post string) ([]entities.Comment, error)
-	GetCommentFunc     func(post, id string) (*entities.Comment, error)
-	CreateCommentFunc  func(comment *entities.Comment) error
-	EditCommentFunc    func(comment *entities.Comment) error
-	DeleteCommentFunc  func(post, id string) error
-	CreateCustomerFunc func(customer *entities.Customer) error
-}
-
-func (s *MockStorage) GetPost(id string) (*entities.Post, error) {
-	return s.GetPostFunc(id)
-}
-
-func (s *MockStorage) GetPosts() ([]entities.Post, error) {
-	return s.GetPostsFunc()
-}
-
-func (s *MockStorage) CreatePost(post *entities.Post) error {
-	return s.CreatePostFunc(post)
-}
-
-func (s *MockStorage) EditPost(post *entities.Post) error {
-	return s.EditPostFunc(post)
-}
-
-func (s *MockStorage) DeletePost(id string) error {
-	return s.DeletePostFunc(id)
-}
-
-func (s *MockStorage) GetComments(post string) ([]entities.Comment, error) {
-	return s.GetCommentsFunc(post)
-}
-
-func (s *MockStorage) GetComment(post, id string) (*entities.Comment, error) {
-	return s.GetCommentFunc(post, id)
-}
-
-func (s *MockStorage) CreateComment(comment *entities.Comment) error {
-	return s.CreateCommentFunc(comment)
-}
-
-func (s *MockStorage) EditComment(comment *entities.Comment) error {
-	return s.EditCommentFunc(comment)
-}
-
-func (s *MockStorage) DeleteComment(post, id string) error {
-	return s.DeleteCommentFunc(post, id)
-}
-
-func (s *MockStorage) CreateCustomer(customer *entities.Customer) error {
-	return s.CreateCustomerFunc(customer)
-}
-
 func TestGETPosts(t *testing.T) {
-	storage := &StubStorage{
+	storage := &stubStorage{
 		posts: map[string]entities.Post{
 			"1": {
 				Id:        "1",
@@ -456,7 +173,7 @@ func TestPOSTPosts(t *testing.T) {
 	})
 
 	t.Run("returns 500 on unexpected error", func(t *testing.T) {
-		storage := &StubFailingStorage{}
+		storage := &stubFailingStorage{}
 		server := NewServer(storage)
 
 		request := newCreatePostRequest(`{"title": "Post X", "content": "Post Content", "author": "Alex"}`)
@@ -470,7 +187,7 @@ func TestPOSTPosts(t *testing.T) {
 }
 
 func TestPUTPosts(t *testing.T) {
-	storage := &StubStorage{
+	storage := &stubStorage{
 		posts: map[string]entities.Post{
 			"1": *entities.NewPost("1", "Post 1", "Post Content", "Alex"),
 			"2": *entities.NewPost("2", "Post 2", "Post Content", "Andre"),
@@ -506,7 +223,7 @@ func TestPUTPosts(t *testing.T) {
 		assertGotError(t, got, want)
 	})
 	t.Run("returns 500 on unexpected error", func(t *testing.T) {
-		storage := &StubFailingStorage{
+		storage := &stubFailingStorage{
 			posts: map[string]entities.Post{
 				"1": *entities.NewPost("1", "Post 1", "Post Content", "Alex"),
 			},
@@ -524,7 +241,7 @@ func TestPUTPosts(t *testing.T) {
 
 func TestDELETEPosts(t *testing.T) {
 	t.Run("returns 200 on post deleted", func(t *testing.T) {
-		storage := &StubStorage{
+		storage := &stubStorage{
 			posts: map[string]entities.Post{
 				"1": *entities.NewPost("1", "Post 1", "Post Content", "Alex"),
 			},
@@ -541,7 +258,7 @@ func TestDELETEPosts(t *testing.T) {
 		}
 	})
 	t.Run("returns 500 on unexpected error", func(t *testing.T) {
-		storage := &StubFailingStorage{}
+		storage := &stubFailingStorage{}
 		server := NewServer(storage)
 
 		request := newDeletePostRequest("1")
@@ -554,7 +271,7 @@ func TestDELETEPosts(t *testing.T) {
 }
 
 func TestGETComments(t *testing.T) {
-	storage := &StubStorage{
+	storage := &stubStorage{
 		posts: map[string]entities.Post{
 			"1": {
 				Id:        "1",
@@ -725,7 +442,7 @@ func TestGETComments(t *testing.T) {
 }
 
 func TestPOSTComments(t *testing.T) {
-	storage := &StubStorage{
+	storage := &stubStorage{
 		posts: map[string]entities.Post{
 			"1": {
 				Id:        "1",
@@ -833,7 +550,7 @@ func TestPOSTComments(t *testing.T) {
 }
 
 func TestPUTComments(t *testing.T) {
-	storage := &StubStorage{
+	storage := &stubStorage{
 		posts: map[string]entities.Post{
 			"1": {
 				Id:        "1",
@@ -892,7 +609,7 @@ func TestPUTComments(t *testing.T) {
 	})
 
 	t.Run("returns 500", func(t *testing.T) {
-		storage := &StubFailingStorage{}
+		storage := &stubFailingStorage{}
 		server := NewServer(storage)
 		request := newEditCommentRequest("1", "2", `{"Content": "Edited Content"}`)
 		response := httptest.NewRecorder()
@@ -904,7 +621,7 @@ func TestPUTComments(t *testing.T) {
 }
 
 func TestDELETEComments(t *testing.T) {
-	storage := &StubStorage{
+	storage := &stubStorage{
 		posts: map[string]entities.Post{
 			"1": {
 				Id:        "1",
@@ -963,7 +680,7 @@ func TestDELETEComments(t *testing.T) {
 	})
 
 	t.Run("returns 500", func(t *testing.T) {
-		storage := &StubFailingStorage{}
+		storage := &stubFailingStorage{}
 		server := NewServer(storage)
 		request := newDeleteCommentRequest("1", "1")
 		response := httptest.NewRecorder()
@@ -1021,11 +738,25 @@ func TestPOSTCustomers(t *testing.T) {
 
 		assertGotError(t, got, want)
 	})
+
+	t.Run("returns 400 and missing fields error", func(t *testing.T) {
+		request := newCreateCustomerRequest(`{}`)
+		response := httptest.NewRecorder()
+
+		server.ServeHTTP(response, request)
+
+		assertStatus(t, response, http.StatusBadRequest)
+
+		got := getErrorFromResponseModel(t, response.Body)
+		want := ErrMissingCustomerFields
+
+		assertGotError(t, got, want)
+	})
 }
 
 func TestServerTimeout(t *testing.T) {
 	t.Run("returns 408 when reaches server timeout", func(t *testing.T) {
-		storage := &MockStorage{
+		storage := &mockStorage{
 			GetPostFunc: func(id string) (*entities.Post, error) {
 				time.Sleep(time.Second * 2)
 				return &entities.Post{}, nil
@@ -1108,44 +839,6 @@ func newDeleteCommentRequest(postId, commentId string) *http.Request {
 func newCreateCustomerRequest(jsonRaw string) *http.Request {
 	req, _ := http.NewRequest(http.MethodPost, "/customers", strings.NewReader(jsonRaw))
 	return req
-}
-
-func assertStatus(t testing.TB, response *httptest.ResponseRecorder, want int) {
-	t.Helper()
-
-	if response.Code != want {
-		t.Fatalf("did not get correct status, got %d but want %d", response.Code, want)
-	}
-}
-
-func assertGotPost(t testing.TB, got, want entities.Post) {
-	t.Helper()
-
-	if !reflect.DeepEqual(got, want) {
-		t.Errorf("wrong post received, got %v but want %v", got, want)
-	}
-}
-
-func assertGotError(t testing.TB, got Error, want *Error) {
-	t.Helper()
-
-	if !reflect.DeepEqual(got, *want) {
-		t.Errorf("got error %q, but want %q", got, *want)
-	}
-}
-
-func assertContains[T any](t testing.TB, list []T, needle T) {
-	t.Helper()
-	contains := false
-	for _, n := range list {
-		if reflect.DeepEqual(n, needle) {
-			contains = true
-			break
-		}
-	}
-	if !contains {
-		t.Errorf("expected %v to contain %v but it didn't", list, needle)
-	}
 }
 
 func getResponseModelFromResponse(t *testing.T, body io.Reader) ResponseModel {

@@ -36,23 +36,25 @@ type ResponseModel struct {
 }
 
 const (
-	ErrPostNotFoundMessage         = "there is no such post here"
-	ErrUnsupportedPostMessage      = "unsupported data to parse as post"
-	ErrMissingPostFieldsMessage    = "missing post fields (title, content and author are required)"
-	ErrUnsupportedCommentMessage   = "unsupported data to parse as comment"
-	ErrMissingCommentFieldsMessage = "missing comment fields (content and author are required)"
-	ErrCommentNotFoundMessage      = "there is no such comment here"
-	ErrUnsupportedCustomerMessage  = "unsupported data to parse as customer"
+	ErrPostNotFoundMessage          = "there is no such post here"
+	ErrUnsupportedPostMessage       = "unsupported data to parse as post"
+	ErrMissingPostFieldsMessage     = "missing post fields (title, content and author are required)"
+	ErrUnsupportedCommentMessage    = "unsupported data to parse as comment"
+	ErrMissingCommentFieldsMessage  = "missing comment fields (content and author are required)"
+	ErrCommentNotFoundMessage       = "there is no such comment here"
+	ErrUnsupportedCustomerMessage   = "unsupported data to parse as customer"
+	ErrMissingCustomerFieldsMessage = "missing customer fields (name is required)"
 )
 
 var (
-	ErrPostNotFound         = NewError("ERR_POST_NOT_FOUND", ErrPostNotFoundMessage)
-	ErrUnsupportedPost      = NewError("ERR_UNSUPPORTED_POST", ErrUnsupportedPostMessage)
-	ErrMissingPostFields    = NewError("ERR_MISSING_POST_FIELDS", ErrMissingPostFieldsMessage)
-	ErrCommentNotFound      = NewError("ERR_COMMENT_NOT_FOUND", ErrCommentNotFoundMessage)
-	ErrUnsupportedComment   = NewError("ERR_UNSUPPORTED_COMMENT", ErrUnsupportedCommentMessage)
-	ErrMissingCommentFields = NewError("ERR_MISSING_COMMENT_FIELDS", ErrMissingCommentFieldsMessage)
-	ErrUnsupportedCustomer  = NewError("ERR_UNSUPPORTED_CUSTOMER", ErrUnsupportedCustomerMessage)
+	ErrPostNotFound          = NewError("ERR_POST_NOT_FOUND", ErrPostNotFoundMessage)
+	ErrUnsupportedPost       = NewError("ERR_UNSUPPORTED_POST", ErrUnsupportedPostMessage)
+	ErrMissingPostFields     = NewError("ERR_MISSING_POST_FIELDS", ErrMissingPostFieldsMessage)
+	ErrCommentNotFound       = NewError("ERR_COMMENT_NOT_FOUND", ErrCommentNotFoundMessage)
+	ErrUnsupportedComment    = NewError("ERR_UNSUPPORTED_COMMENT", ErrUnsupportedCommentMessage)
+	ErrMissingCommentFields  = NewError("ERR_MISSING_COMMENT_FIELDS", ErrMissingCommentFieldsMessage)
+	ErrUnsupportedCustomer   = NewError("ERR_UNSUPPORTED_CUSTOMER", ErrUnsupportedCustomerMessage)
+	ErrMissingCustomerFields = NewError("ERR_MISSING_CUSTOMER_FIELDS", ErrMissingCustomerFieldsMessage)
 
 	mErrors = map[error]*Error{
 		storage.ErrPostNotFound:         ErrPostNotFound,
@@ -113,6 +115,7 @@ func (s *Server) writeResponse(w http.ResponseWriter, data any, err error) {
 			w.WriteHeader(http.StatusNotFound)
 		case ErrMissingPostFields,
 			ErrMissingCommentFields,
+			ErrMissingCustomerFields,
 			ErrUnsupportedPost,
 			ErrUnsupportedComment,
 			ErrUnsupportedCustomer:
