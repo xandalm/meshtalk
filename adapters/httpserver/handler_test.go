@@ -978,33 +978,49 @@ func TestPOSTCustomers(t *testing.T) {
 	storage := NewStubStorage()
 	server := NewServer(storage)
 
-	request, _ := http.NewRequest(http.MethodPost, "/customers", strings.NewReader(`{"name": "Marie"}`))
-	response := httptest.NewRecorder()
+	t.Run("returns 201 and customer", func(t *testing.T) {
+		request := newCreateCustomerRequest(`{"name": "Marie"}`)
+		response := httptest.NewRecorder()
 
-	server.ServeHTTP(response, request)
+		server.ServeHTTP(response, request)
 
-	assertStatus(t, response, http.StatusCreated)
+		assertStatus(t, response, http.StatusCreated)
 
-	if _, ok := storage.customers["1"]; !ok {
-		t.Errorf("didn't creates the customer")
-	}
+		if _, ok := storage.customers["1"]; !ok {
+			t.Errorf("didn't creates the customer")
+		}
 
-	want := entities.Customer{
-		Id:   "1",
-		Name: "Marie",
-	}
+		want := entities.Customer{
+			Id:   "1",
+			Name: "Marie",
+		}
 
-	got := getCustomerFromResponseModel(t, response.Body)
+		got := getCustomerFromResponseModel(t, response.Body)
 
-	if got.Id != want.Id || got.Name != want.Name {
-		t.Errorf(
-			`did not get expected comment, got {Id="%s", Name="%s"} want {Id="%s", Name="%s"}`,
-			got.Id,
-			got.Name,
-			want.Id,
-			want.Name,
-		)
-	}
+		if got.Id != want.Id || got.Name != want.Name {
+			t.Errorf(
+				`did not get expected comment, got {Id="%s", Name="%s"} want {Id="%s", Name="%s"}`,
+				got.Id,
+				got.Name,
+				want.Id,
+				want.Name,
+			)
+		}
+	})
+
+	t.Run("returns 400 and unsupported error", func(t *testing.T) {
+		request := newCreateCustomerRequest(`data`)
+		response := httptest.NewRecorder()
+
+		server.ServeHTTP(response, request)
+
+		assertStatus(t, response, http.StatusBadRequest)
+
+		got := getErrorFromResponseModel(t, response.Body)
+		want := ErrUnsupportedCustomer
+
+		assertGotError(t, got, want)
+	})
 }
 
 func TestServerTimeout(t *testing.T) {
@@ -1086,6 +1102,11 @@ func newEditCommentRequest(postId, commentId, jsonRaw string) *http.Request {
 
 func newDeleteCommentRequest(postId, commentId string) *http.Request {
 	req, _ := http.NewRequest(http.MethodDelete, "/posts/"+postId+"/comments/"+commentId, nil)
+	return req
+}
+
+func newCreateCustomerRequest(jsonRaw string) *http.Request {
+	req, _ := http.NewRequest(http.MethodPost, "/customers", strings.NewReader(jsonRaw))
 	return req
 }
 

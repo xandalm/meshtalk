@@ -42,6 +42,7 @@ const (
 	ErrUnsupportedCommentMessage   = "unsupported data to parse as comment"
 	ErrMissingCommentFieldsMessage = "missing comment fields (content and author are required)"
 	ErrCommentNotFoundMessage      = "there is no such comment here"
+	ErrUnsupportedCustomerMessage  = "unsupported data to parse as customer"
 )
 
 var (
@@ -51,7 +52,9 @@ var (
 	ErrCommentNotFound      = NewError("ERR_COMMENT_NOT_FOUND", ErrCommentNotFoundMessage)
 	ErrUnsupportedComment   = NewError("ERR_UNSUPPORTED_COMMENT", ErrUnsupportedCommentMessage)
 	ErrMissingCommentFields = NewError("ERR_MISSING_COMMENT_FIELDS", ErrMissingCommentFieldsMessage)
-	mErrors                 = map[error]*Error{
+	ErrUnsupportedCustomer  = NewError("ERR_UNSUPPORTED_CUSTOMER", ErrUnsupportedCustomerMessage)
+
+	mErrors = map[error]*Error{
 		storage.ErrPostNotFound:         ErrPostNotFound,
 		storage.ErrMissingPostFields:    ErrMissingPostFields,
 		storage.ErrCommentNotFound:      ErrCommentNotFound,
@@ -111,7 +114,8 @@ func (s *Server) writeResponse(w http.ResponseWriter, data any, err error) {
 		case ErrMissingPostFields,
 			ErrMissingCommentFields,
 			ErrUnsupportedPost,
-			ErrUnsupportedComment:
+			ErrUnsupportedComment,
+			ErrUnsupportedCustomer:
 			w.WriteHeader(http.StatusBadRequest)
 		default:
 			w.WriteHeader(http.StatusInternalServerError)
@@ -149,7 +153,7 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 func (s *Server) createCustomer(w router.ResponseWriter, r *router.Request) {
 	var customer entities.Customer
 	if err := r.ParseBodyInto(&customer); err != nil {
-		s.writeResponse(w, nil, err)
+		s.writeResponse(w, nil, ErrUnsupportedCustomer)
 		return
 	}
 	if err := s.storage.CreateCustomer(&customer); err != nil {
