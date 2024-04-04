@@ -44,6 +44,7 @@ const (
 	ErrCommentNotFoundMessage       = "there is no such comment here"
 	ErrUnsupportedCustomerMessage   = "unsupported data to parse as customer"
 	ErrMissingCustomerFieldsMessage = "missing customer fields (name is required)"
+	ErrCustomerNotFoundMessage      = "there is no such customer here"
 )
 
 var (
@@ -55,6 +56,7 @@ var (
 	ErrMissingCommentFields  = NewError("ERR_MISSING_COMMENT_FIELDS", ErrMissingCommentFieldsMessage)
 	ErrUnsupportedCustomer   = NewError("ERR_UNSUPPORTED_CUSTOMER", ErrUnsupportedCustomerMessage)
 	ErrMissingCustomerFields = NewError("ERR_MISSING_CUSTOMER_FIELDS", ErrMissingCustomerFieldsMessage)
+	ErrCustomerNotFound      = NewError("ERR_CUSTOMER_NOT_FOUND", ErrCustomerNotFoundMessage)
 
 	mErrors = map[error]*Error{
 		storage.ErrPostNotFound:         ErrPostNotFound,
@@ -112,7 +114,8 @@ func (s *Server) writeResponse(w http.ResponseWriter, data any, err error) {
 		}
 		switch err {
 		case ErrPostNotFound,
-			ErrCommentNotFound:
+			ErrCommentNotFound,
+			ErrCustomerNotFound:
 			w.WriteHeader(http.StatusNotFound)
 		case ErrMissingPostFields,
 			ErrMissingCommentFields,
@@ -175,8 +178,15 @@ func (s *Server) createCustomerHandler(w router.ResponseWriter, r *router.Reques
 func (s *Server) getCustomerHandler(w router.ResponseWriter, r *router.Request) {
 	customerId := r.Params()["id"]
 
-	found, _ := s.storage.GetCustomer(customerId)
-	s.writeResponse(w, found, nil)
+	found, err := s.storage.GetCustomer(customerId)
+	if err != nil {
+		s.writeResponse(w, nil, err)
+	}
+	if found != nil {
+		s.writeResponse(w, found, nil)
+		return
+	}
+	s.writeResponse(w, nil, ErrCustomerNotFound)
 }
 
 func (s *Server) createPostHandler(w router.ResponseWriter, r *router.Request) {

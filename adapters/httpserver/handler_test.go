@@ -791,6 +791,28 @@ func TestGETCustomers(t *testing.T) {
 		assertGotCustomer(t, got, want)
 	})
 
+	t.Run("returns 404 and not found customer error", func(t *testing.T) {
+		request := newGetCustomerRequest("2")
+		response := httptest.NewRecorder()
+
+		server.ServeHTTP(response, request)
+
+		assertStatus(t, response, http.StatusNotFound)
+
+		got := getErrorFromResponseModel(t, response.Body)
+		assertGotError(t, got, ErrCustomerNotFound)
+	})
+
+	t.Run("returns 500", func(t *testing.T) {
+		server := NewServer(&stubFailingStorage{})
+
+		request := newGetCustomerRequest("1")
+		response := httptest.NewRecorder()
+
+		server.ServeHTTP(response, request)
+
+		assertStatus(t, response, http.StatusInternalServerError)
+	})
 }
 
 func TestServerTimeout(t *testing.T) {
