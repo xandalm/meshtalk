@@ -850,6 +850,18 @@ func TestPUTCustomers(t *testing.T) {
 			t.Errorf("didn't update customer")
 		}
 	})
+
+	t.Run("returns 404", func(t *testing.T) {
+		request := newEditCustomerRequest("2", `{"name": "Marie"}`)
+		response := httptest.NewRecorder()
+
+		server.ServeHTTP(response, request)
+
+		assertStatus(t, response, http.StatusNotFound)
+
+		got := getErrorFromResponseModel(t, response.Body)
+		assertGotError(t, got, ErrCustomerNotFound)
+	})
 }
 
 func TestServerTimeout(t *testing.T) {

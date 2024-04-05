@@ -187,6 +187,9 @@ func (s *stubStorage) GetCustomer(id string) (*entities.Customer, error) {
 }
 
 func (s *stubStorage) EditCustomer(customer *entities.Customer) error {
+	if _, ok := s.customers[customer.Id]; !ok {
+		return ErrCustomerNotFound
+	}
 	s.customerEditCalls = append(s.customerEditCalls, fmt.Sprintf("%+v", *customer))
 	return nil
 }
