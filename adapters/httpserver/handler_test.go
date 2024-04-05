@@ -874,6 +874,17 @@ func TestPUTCustomers(t *testing.T) {
 		got := getErrorFromResponseModel(t, response.Body)
 		assertGotError(t, got, ErrMissingCustomerFields)
 	})
+
+	t.Run("returns 500", func(t *testing.T) {
+		server := NewServer(&stubFailingStorage{})
+
+		request := newEditCustomerRequest("1", `{"name": "James"}`)
+		response := httptest.NewRecorder()
+
+		server.ServeHTTP(response, request)
+
+		assertStatus(t, response, http.StatusInternalServerError)
+	})
 }
 
 func TestServerTimeout(t *testing.T) {
