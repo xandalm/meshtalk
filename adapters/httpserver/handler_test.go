@@ -862,6 +862,18 @@ func TestPUTCustomers(t *testing.T) {
 		got := getErrorFromResponseModel(t, response.Body)
 		assertGotError(t, got, ErrCustomerNotFound)
 	})
+
+	t.Run("returns 400", func(t *testing.T) {
+		request := newEditCustomerRequest("1", `{}`)
+		response := httptest.NewRecorder()
+
+		server.ServeHTTP(response, request)
+
+		assertStatus(t, response, http.StatusBadRequest)
+
+		got := getErrorFromResponseModel(t, response.Body)
+		assertGotError(t, got, ErrMissingCustomerFields)
+	})
 }
 
 func TestServerTimeout(t *testing.T) {

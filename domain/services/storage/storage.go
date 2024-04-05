@@ -6,10 +6,12 @@ import (
 )
 
 var (
-	ErrPostNotFound         = errors.New("storage: post not found")
-	ErrMissingPostFields    = errors.New("storage: title, content and author are required for the post")
-	ErrCommentNotFound      = errors.New("storage: comment not found")
-	ErrMissingCommentFields = errors.New("storage: content and author are required for the comment")
+	ErrPostNotFound          = errors.New("storage: post not found")
+	ErrMissingPostFields     = errors.New("storage: title, content and author are required for the post")
+	ErrCommentNotFound       = errors.New("storage: comment not found")
+	ErrMissingCommentFields  = errors.New("storage: content and author are required for the comment")
+	ErrCustomerNotFound      = errors.New("storage: customer not found")
+	ErrMissingCustomerFields = errors.New("storage: name is required for the customer")
 )
 
 type Storage interface {

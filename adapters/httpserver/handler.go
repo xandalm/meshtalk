@@ -59,10 +59,12 @@ var (
 	ErrCustomerNotFound      = NewError("ERR_CUSTOMER_NOT_FOUND", ErrCustomerNotFoundMessage)
 
 	mErrors = map[error]*Error{
-		storage.ErrPostNotFound:         ErrPostNotFound,
-		storage.ErrMissingPostFields:    ErrMissingPostFields,
-		storage.ErrCommentNotFound:      ErrCommentNotFound,
-		storage.ErrMissingCommentFields: ErrMissingCommentFields,
+		storage.ErrPostNotFound:          ErrPostNotFound,
+		storage.ErrMissingPostFields:     ErrMissingPostFields,
+		storage.ErrCommentNotFound:       ErrCommentNotFound,
+		storage.ErrMissingCommentFields:  ErrMissingCommentFields,
+		storage.ErrCustomerNotFound:      ErrCustomerNotFound,
+		storage.ErrMissingCustomerFields: ErrMissingCustomerFields,
 	}
 )
 

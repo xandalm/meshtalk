@@ -156,7 +156,7 @@ func (s *stubStorage) EditComment(comment *entities.Comment) error {
 func (s *stubStorage) DeleteComment(post, id string) error {
 	comments, ok := s.comments[post]
 	if !ok {
-		return ErrPostNotFound
+		return storage.ErrPostNotFound
 	}
 	delete(comments, id)
 	return nil
@@ -164,7 +164,7 @@ func (s *stubStorage) DeleteComment(post, id string) error {
 
 func (s *stubStorage) CreateCustomer(customer *entities.Customer) error {
 	if customer.Name == "" {
-		return ErrMissingCustomerFields
+		return storage.ErrMissingCustomerFields
 	}
 	customer.Id = strconv.Itoa(len(s.customers) + 1)
 	customer.CreatedAt = timeToString(time.Now())
@@ -188,7 +188,10 @@ func (s *stubStorage) GetCustomer(id string) (*entities.Customer, error) {
 
 func (s *stubStorage) EditCustomer(customer *entities.Customer) error {
 	if _, ok := s.customers[customer.Id]; !ok {
-		return ErrCustomerNotFound
+		return storage.ErrCustomerNotFound
+	}
+	if customer.Name == "" {
+		return storage.ErrMissingCustomerFields
 	}
 	s.customerEditCalls = append(s.customerEditCalls, fmt.Sprintf("%+v", *customer))
 	return nil
