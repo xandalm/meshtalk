@@ -13,11 +13,12 @@ import (
 )
 
 type stubStorage struct {
-	customers        map[string]entities.Customer
-	posts            map[string]entities.Post
-	comments         map[string]map[string]entities.Comment
-	postEditCalls    []string
-	commentEditCalls []string
+	customers         map[string]entities.Customer
+	posts             map[string]entities.Post
+	comments          map[string]map[string]entities.Comment
+	customerEditCalls []string
+	postEditCalls     []string
+	commentEditCalls  []string
 }
 
 func NewStubStorage() *stubStorage {
@@ -25,6 +26,7 @@ func NewStubStorage() *stubStorage {
 		map[string]entities.Customer{},
 		map[string]entities.Post{},
 		map[string]map[string]entities.Comment{},
+		[]string{},
 		[]string{},
 		[]string{},
 	}
@@ -70,20 +72,11 @@ func timeToString(t time.Time) string {
 }
 
 func (s *stubStorage) EditPost(post *entities.Post) error {
-	found, ok := s.posts[post.Id]
+	_, ok := s.posts[post.Id]
 	if !ok {
 		return storage.ErrPostNotFound
 	}
-	if post.Title == "" {
-		post.Title = found.Title
-	}
-	if post.Content == "" {
-		post.Content = found.Content
-	}
-	if post.Author == "" {
-		post.Author = found.Author
-	}
-	s.postEditCalls = append(s.postEditCalls, post.Id)
+	s.postEditCalls = append(s.postEditCalls, fmt.Sprintf("%+v", *post))
 	return nil
 }
 
@@ -153,17 +146,10 @@ func (s *stubStorage) EditComment(comment *entities.Comment) error {
 	if !ok {
 		return storage.ErrPostNotFound
 	}
-	found, ok := comments[comment.Id]
-	if !ok {
+	if _, ok := comments[comment.Id]; !ok {
 		return storage.ErrCommentNotFound
 	}
-	if comment.Author == "" {
-		comment.Author = found.Author
-	}
-	if comment.Content == "" {
-		comment.Content = found.Content
-	}
-	s.commentEditCalls = append(s.commentEditCalls, fmt.Sprintf("%+v", comment))
+	s.commentEditCalls = append(s.commentEditCalls, fmt.Sprintf("%+v", *comment))
 	return nil
 }
 
@@ -198,6 +184,11 @@ func (s *stubStorage) GetCustomer(id string) (*entities.Customer, error) {
 		UpdatedAt: found.UpdatedAt,
 		DeletedAt: found.DeletedAt,
 	}, nil
+}
+
+func (s *stubStorage) EditCustomer(customer *entities.Customer) error {
+	s.customerEditCalls = append(s.customerEditCalls, fmt.Sprintf("%+v", *customer))
+	return nil
 }
 
 var errFoo = errors.New("some error")
@@ -254,6 +245,10 @@ func (s *stubFailingStorage) GetCustomer(id string) (*entities.Customer, error) 
 	return nil, errFoo
 }
 
+func (s *stubFailingStorage) EditCustomer(customer *entities.Customer) error {
+	return errFoo
+}
+
 type mockStorage struct {
 	GetPostFunc        func(id string) (*entities.Post, error)
 	GetPostsFunc       func() ([]entities.Post, error)
@@ -267,6 +262,7 @@ type mockStorage struct {
 	DeleteCommentFunc  func(post, id string) error
 	CreateCustomerFunc func(customer *entities.Customer) error
 	GetCustomerFunc    func(id string) (*entities.Customer, error)
+	EditCustomerFunc   func(customer *entities.Customer) error
 }
 
 func (s *mockStorage) GetPost(id string) (*entities.Post, error) {
@@ -315,6 +311,10 @@ func (s *mockStorage) CreateCustomer(customer *entities.Customer) error {
 
 func (s *mockStorage) GetCustomer(id string) (*entities.Customer, error) {
 	return s.GetCustomerFunc(id)
+}
+
+func (s *mockStorage) EditCustomer(customer *entities.Customer) error {
+	return s.EditCustomerFunc(customer)
 }
 
 func assertStatus(t testing.TB, response *httptest.ResponseRecorder, want int) {

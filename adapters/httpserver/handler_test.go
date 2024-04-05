@@ -3,10 +3,12 @@ package httpserver
 import (
 	"bytes"
 	"encoding/json"
+	"fmt"
 	"io"
 	"meshtalk/domain/entities"
 	"net/http"
 	"net/http/httptest"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -203,8 +205,11 @@ func TestPUTPosts(t *testing.T) {
 
 		assertStatus(t, response, http.StatusNoContent)
 
-		if len(storage.postEditCalls) != 1 {
-			t.Error("did not edited the post")
+		if !slices.Contains(
+			storage.postEditCalls,
+			fmt.Sprintf("%+v", entities.Post{Id: "1", Content: "Edited Content"}),
+		) {
+			t.Errorf("didn't update post")
 		}
 	})
 	t.Run("returns 404 on nonexistent post", func(t *testing.T) {
@@ -589,8 +594,11 @@ func TestPUTComments(t *testing.T) {
 
 		assertStatus(t, response, http.StatusNoContent)
 
-		if len(storage.commentEditCalls) != 1 {
-			t.Error("didn't edit the comment")
+		if !slices.Contains(
+			storage.commentEditCalls,
+			fmt.Sprintf("%+v", entities.Comment{Post: "1", Id: "1", Content: "Edited Content"}),
+		) {
+			t.Errorf("didn't update comment")
 		}
 	})
 
@@ -815,6 +823,35 @@ func TestGETCustomers(t *testing.T) {
 	})
 }
 
+func TestPUTCustomers(t *testing.T) {
+	storage := &stubStorage{
+		customers: map[string]entities.Customer{
+			"1": {
+				Id:        "1",
+				Name:      "John",
+				CreatedAt: newDate(2024, time.April, 4, 11, 55, 0, 0),
+			},
+		},
+	}
+	server := NewServer(storage)
+
+	t.Run("returns 204", func(t *testing.T) {
+		request := newEditCustomerRequest("1", `{"name": "Jhonny"}`)
+		response := httptest.NewRecorder()
+
+		server.ServeHTTP(response, request)
+
+		assertStatus(t, response, http.StatusNoContent)
+
+		if !slices.Contains(
+			storage.customerEditCalls,
+			fmt.Sprintf("%+v", entities.Customer{Id: "1", Name: "Jhonny"}),
+		) {
+			t.Errorf("didn't update customer")
+		}
+	})
+}
+
 func TestServerTimeout(t *testing.T) {
 	t.Run("returns 408 when reaches server timeout", func(t *testing.T) {
 		storage := &mockStorage{
@@ -904,6 +941,11 @@ func newCreateCustomerRequest(jsonRaw string) *http.Request {
 
 func newGetCustomerRequest(customerId string) *http.Request {
 	req, _ := http.NewRequest(http.MethodGet, "/customers/"+customerId, nil)
+	return req
+}
+
+func newEditCustomerRequest(customerId, jsonRaw string) *http.Request {
+	req, _ := http.NewRequest(http.MethodPut, "/customers/"+customerId, strings.NewReader(jsonRaw))
 	return req
 }
 

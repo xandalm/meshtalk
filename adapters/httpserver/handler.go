@@ -80,6 +80,7 @@ func NewServer(storage storage.Storage) *Server {
 	}
 
 	s.router.GetFunc("/customers/{id}", s.getCustomerHandler)
+	s.router.PutFunc("/customers/{id}", s.editCustomerHandler)
 	s.router.PostFunc("/customers", s.createCustomerHandler)
 
 	s.router.GetFunc("/posts/{id}", s.getPostHandler)
@@ -187,6 +188,23 @@ func (s *Server) getCustomerHandler(w router.ResponseWriter, r *router.Request) 
 		return
 	}
 	s.writeResponse(w, nil, ErrCustomerNotFound)
+}
+
+func (s *Server) editCustomerHandler(w router.ResponseWriter, r *router.Request) {
+	customerId := r.Params()["id"]
+
+	var customer entities.Customer
+	if err := r.ParseBodyInto(&customer); err != nil {
+		s.writeResponse(w, nil, ErrUnsupportedCustomer)
+		return
+	}
+	customer.Id = customerId
+
+	if err := s.storage.EditCustomer(&customer); err != nil {
+		s.writeResponse(w, nil, err)
+	}
+
+	w.WriteHeader(http.StatusNoContent)
 }
 
 func (s *Server) createPostHandler(w router.ResponseWriter, r *router.Request) {
