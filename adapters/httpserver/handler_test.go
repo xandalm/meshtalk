@@ -887,6 +887,37 @@ func TestPUTCustomers(t *testing.T) {
 	})
 }
 
+func TestDELETECustomers(t *testing.T) {
+	storage := &stubStorage{
+		customers: map[string]entities.Customer{
+			"1": {
+				Id:        "1",
+				Name:      "John",
+				CreatedAt: newDate(2024, time.April, 4, 11, 55, 0, 0),
+			},
+			"2": {
+				Id:        "2",
+				Name:      "Mary",
+				CreatedAt: newDate(2024, time.April, 4, 11, 55, 0, 0),
+			},
+		},
+	}
+	server := NewServer(storage)
+
+	t.Run("returns 204", func(t *testing.T) {
+		request := newDeleteCustomerRequest("2")
+		response := httptest.NewRecorder()
+
+		server.ServeHTTP(response, request)
+
+		assertStatus(t, response, http.StatusNoContent)
+
+		if _, ok := storage.customers["2"]; ok {
+			t.Errorf("didn't delete customer")
+		}
+	})
+}
+
 func TestServerTimeout(t *testing.T) {
 	t.Run("returns 408 when reaches server timeout", func(t *testing.T) {
 		storage := &mockStorage{
@@ -981,6 +1012,11 @@ func newGetCustomerRequest(customerId string) *http.Request {
 
 func newEditCustomerRequest(customerId, jsonRaw string) *http.Request {
 	req, _ := http.NewRequest(http.MethodPut, "/customers/"+customerId, strings.NewReader(jsonRaw))
+	return req
+}
+
+func newDeleteCustomerRequest(customerId string) *http.Request {
+	req, _ := http.NewRequest(http.MethodDelete, "/customers/"+customerId, nil)
 	return req
 }
 

@@ -83,6 +83,7 @@ func NewServer(storage storage.Storage) *Server {
 
 	s.router.GetFunc("/customers/{id}", s.getCustomerHandler)
 	s.router.PutFunc("/customers/{id}", s.editCustomerHandler)
+	s.router.DeleteFunc("/customers/{id}", s.deleteCustomerHandler)
 	s.router.PostFunc("/customers", s.createCustomerHandler)
 
 	s.router.GetFunc("/posts/{id}", s.getPostHandler)
@@ -206,6 +207,13 @@ func (s *Server) editCustomerHandler(w router.ResponseWriter, r *router.Request)
 		s.writeResponse(w, nil, err)
 	}
 
+	w.WriteHeader(http.StatusNoContent)
+}
+
+func (s *Server) deleteCustomerHandler(w router.ResponseWriter, r *router.Request) {
+	customerId := r.Params()["id"]
+
+	s.storage.DeleteCustomer(customerId)
 	w.WriteHeader(http.StatusNoContent)
 }
 

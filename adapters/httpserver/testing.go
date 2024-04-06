@@ -197,6 +197,11 @@ func (s *stubStorage) EditCustomer(customer *entities.Customer) error {
 	return nil
 }
 
+func (s *stubStorage) DeleteCustomer(id string) error {
+	delete(s.customers, id)
+	return nil
+}
+
 var errFoo = errors.New("some error")
 
 type stubFailingStorage struct {
@@ -255,6 +260,10 @@ func (s *stubFailingStorage) EditCustomer(customer *entities.Customer) error {
 	return errFoo
 }
 
+func (s *stubFailingStorage) DeleteCustomer(id string) error {
+	return errFoo
+}
+
 type mockStorage struct {
 	GetPostFunc        func(id string) (*entities.Post, error)
 	GetPostsFunc       func() ([]entities.Post, error)
@@ -269,6 +278,7 @@ type mockStorage struct {
 	CreateCustomerFunc func(customer *entities.Customer) error
 	GetCustomerFunc    func(id string) (*entities.Customer, error)
 	EditCustomerFunc   func(customer *entities.Customer) error
+	DeleteCustomerFunc func(id string) error
 }
 
 func (s *mockStorage) GetPost(id string) (*entities.Post, error) {
@@ -321,6 +331,10 @@ func (s *mockStorage) GetCustomer(id string) (*entities.Customer, error) {
 
 func (s *mockStorage) EditCustomer(customer *entities.Customer) error {
 	return s.EditCustomerFunc(customer)
+}
+
+func (s *mockStorage) DeleteCustomer(id string) error {
+	return s.DeleteCustomerFunc(id)
 }
 
 func assertStatus(t testing.TB, response *httptest.ResponseRecorder, want int) {

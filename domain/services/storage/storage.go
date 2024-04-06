@@ -18,6 +18,7 @@ type Storage interface {
 	CreateCustomer(customer *entities.Customer) error
 	GetCustomer(id string) (*entities.Customer, error)
 	EditCustomer(customer *entities.Customer) error
+	DeleteCustomer(id string) error
 	GetPost(id string) (*entities.Post, error)
 	GetPosts() ([]entities.Post, error)
 	CreatePost(post *entities.Post) error
