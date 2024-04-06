@@ -213,7 +213,9 @@ func (s *Server) editCustomerHandler(w router.ResponseWriter, r *router.Request)
 func (s *Server) deleteCustomerHandler(w router.ResponseWriter, r *router.Request) {
 	customerId := r.Params()["id"]
 
-	s.storage.DeleteCustomer(customerId)
+	if err := s.storage.DeleteCustomer(customerId); err != nil {
+		s.writeResponse(w, nil, err)
+	}
 	w.WriteHeader(http.StatusNoContent)
 }
 
@@ -287,7 +289,7 @@ func (s *Server) deletePostHandler(w router.ResponseWriter, r *router.Request) {
 		s.writeResponse(w, nil, err)
 		return
 	}
-	w.WriteHeader(http.StatusOK)
+	w.WriteHeader(http.StatusNoContent)
 }
 
 func (s *Server) getCommentsHandler(w router.ResponseWriter, r *router.Request) {

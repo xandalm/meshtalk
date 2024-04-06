@@ -256,7 +256,7 @@ func TestDELETEPosts(t *testing.T) {
 
 		server.ServeHTTP(response, request)
 
-		assertStatus(t, response, http.StatusOK)
+		assertStatus(t, response, http.StatusNoContent)
 		if len(storage.posts) != 0 {
 			t.Errorf("expected that the post was deleted, but it was not")
 		}
@@ -915,6 +915,18 @@ func TestDELETECustomers(t *testing.T) {
 		if _, ok := storage.customers["2"]; ok {
 			t.Errorf("didn't delete customer")
 		}
+	})
+
+	t.Run("returns 500", func(t *testing.T) {
+		storage := &stubFailingStorage{}
+		server := NewServer(storage)
+
+		request := newDeleteCustomerRequest("1")
+		response := httptest.NewRecorder()
+
+		server.ServeHTTP(response, request)
+
+		assertStatus(t, response, http.StatusInternalServerError)
 	})
 }
 
