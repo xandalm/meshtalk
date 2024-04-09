@@ -49,23 +49,20 @@ const (
 )
 
 var (
-	ErrPostNotFound          = NewError("ERR_POST_NOT_FOUND", ErrPostNotFoundMessage)
 	ErrUnsupportedPost       = NewError("ERR_UNSUPPORTED_POST", ErrUnsupportedPostMessage)
 	ErrMissingPostFields     = NewError("ERR_MISSING_POST_FIELDS", ErrMissingPostFieldsMessage)
-	ErrCommentNotFound       = NewError("ERR_COMMENT_NOT_FOUND", ErrCommentNotFoundMessage)
 	ErrUnsupportedComment    = NewError("ERR_UNSUPPORTED_COMMENT", ErrUnsupportedCommentMessage)
 	ErrMissingCommentFields  = NewError("ERR_MISSING_COMMENT_FIELDS", ErrMissingCommentFieldsMessage)
 	ErrUnsupportedCustomer   = NewError("ERR_UNSUPPORTED_CUSTOMER", ErrUnsupportedCustomerMessage)
 	ErrMissingCustomerFields = NewError("ERR_MISSING_CUSTOMER_FIELDS", ErrMissingCustomerFieldsMessage)
-	ErrCustomerNotFound      = NewError("ERR_CUSTOMER_NOT_FOUND", ErrCustomerNotFoundMessage)
 	ErrNothingToUpdate       = NewError("ERR_NOTHING_TO_UPDATE", ErrNothingToUpdateMessage)
 
-	mErrors = map[error]*Error{
-		storage.ErrPostNotFound:          ErrPostNotFound,
+	overwrittenErrors = map[error]*Error{
+		storage.ErrPostNotFound:          nil,
 		storage.ErrMissingPostFields:     ErrMissingPostFields,
-		storage.ErrCommentNotFound:       ErrCommentNotFound,
+		storage.ErrCommentNotFound:       nil,
 		storage.ErrMissingCommentFields:  ErrMissingCommentFields,
-		storage.ErrCustomerNotFound:      ErrCustomerNotFound,
+		storage.ErrCustomerNotFound:      nil,
 		storage.ErrMissingCustomerFields: ErrMissingCustomerFields,
 	}
 )
@@ -113,35 +110,47 @@ func (s *Server) SetTimeout(duration time.Duration) error {
 	return nil
 }
 
-func (s *Server) writeResponse(w http.ResponseWriter, data any, err error) {
-	if err != nil {
-		if e, ok := mErrors[err]; ok {
-			err = e
-		}
-		switch err {
-		case ErrPostNotFound,
-			ErrCommentNotFound,
-			ErrCustomerNotFound:
-			w.WriteHeader(http.StatusNotFound)
-		case ErrMissingPostFields,
-			ErrMissingCommentFields,
-			ErrMissingCustomerFields,
-			ErrUnsupportedPost,
-			ErrUnsupportedComment,
-			ErrUnsupportedCustomer,
-			ErrNothingToUpdate:
-			w.WriteHeader(http.StatusBadRequest)
-		default:
-			w.WriteHeader(http.StatusInternalServerError)
-		}
+func (s *Server) writeResponseModelWithoutError(w http.ResponseWriter, data any, status ...int) {
+	if data == nil {
+		return
 	}
-	writeJSON(
-		w,
-		ResponseModel{
-			Data:  data,
+	if len(status) > 0 {
+		w.WriteHeader(status[0])
+	}
+	writeJSON(w, ResponseModel{
+		Data: data,
+	})
+}
+
+func (s *Server) writeResponseModelWithError(w http.ResponseWriter, err error) {
+	if err == nil {
+		return
+	}
+	switch err {
+	case storage.ErrPostNotFound,
+		storage.ErrCommentNotFound,
+		storage.ErrCustomerNotFound:
+		w.WriteHeader(http.StatusNotFound)
+	case storage.ErrMissingPostFields,
+		storage.ErrMissingCommentFields,
+		storage.ErrMissingCustomerFields,
+		ErrUnsupportedPost,
+		ErrUnsupportedComment,
+		ErrUnsupportedCustomer,
+		ErrNothingToUpdate:
+		w.WriteHeader(http.StatusBadRequest)
+	default:
+		w.WriteHeader(http.StatusInternalServerError)
+	}
+	// Maybe overwrite the error
+	if e, ok := overwrittenErrors[err]; ok {
+		err = e
+	}
+	if err != nil {
+		writeJSON(w, ResponseModel{
 			Error: err,
-		},
-	)
+		})
+	}
 }
 
 func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
@@ -167,18 +176,17 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 func (s *Server) createCustomerHandler(w router.ResponseWriter, r *router.Request) {
 	var customer entities.Customer
 	if err := r.ParseBodyInto(&customer); err != nil {
-		s.writeResponse(w, nil, ErrUnsupportedCustomer)
+		s.writeResponseModelWithError(w, ErrUnsupportedCustomer)
 		return
 	}
 	if err := s.storage.CreateCustomer(&customer); err != nil {
-		s.writeResponse(w, nil, err)
+		s.writeResponseModelWithError(w, err)
 		return
 	}
-	w.WriteHeader(http.StatusCreated)
-	s.writeResponse(
+	s.writeResponseModelWithoutError(
 		w,
 		customer,
-		nil,
+		http.StatusCreated,
 	)
 }
 
@@ -187,13 +195,13 @@ func (s *Server) getCustomerHandler(w router.ResponseWriter, r *router.Request) 
 
 	found, err := s.storage.GetCustomer(customerId)
 	if err != nil {
-		s.writeResponse(w, nil, err)
+		s.writeResponseModelWithError(w, err)
 	}
-	if found != nil {
-		s.writeResponse(w, found, nil)
+	if found == nil {
+		w.WriteHeader(http.StatusNotFound)
 		return
 	}
-	s.writeResponse(w, nil, ErrCustomerNotFound)
+	s.writeResponseModelWithoutError(w, found)
 }
 
 func (s *Server) editCustomerHandler(w router.ResponseWriter, r *router.Request) {
@@ -201,18 +209,18 @@ func (s *Server) editCustomerHandler(w router.ResponseWriter, r *router.Request)
 
 	var edit entities.CustomerInEditting
 	if err := r.ParseBodyInto(&edit); err != nil {
-		s.writeResponse(w, nil, ErrUnsupportedCustomer)
+		s.writeResponseModelWithError(w, ErrUnsupportedCustomer)
 		return
 	}
 	edit.Id = params["id"]
 
 	if edit.Name == nil {
-		s.writeResponse(w, nil, ErrNothingToUpdate)
+		s.writeResponseModelWithError(w, ErrNothingToUpdate)
 		return
 	}
 
 	if _, err := s.storage.EditCustomer(edit); err != nil {
-		s.writeResponse(w, nil, err)
+		s.writeResponseModelWithError(w, err)
 	}
 
 	w.WriteHeader(http.StatusNoContent)
@@ -222,7 +230,7 @@ func (s *Server) deleteCustomerHandler(w router.ResponseWriter, r *router.Reques
 	customerId := r.Params()["id"]
 
 	if err := s.storage.DeleteCustomer(customerId); err != nil {
-		s.writeResponse(w, nil, err)
+		s.writeResponseModelWithError(w, err)
 	}
 	w.WriteHeader(http.StatusNoContent)
 }
@@ -231,20 +239,19 @@ func (s *Server) createPostHandler(w router.ResponseWriter, r *router.Request) {
 	var post entities.Post
 	err := r.ParseBodyInto(&post)
 	if err != nil {
-		s.writeResponse(w, nil, ErrUnsupportedPost)
+		s.writeResponseModelWithError(w, ErrUnsupportedPost)
 		return
 	}
 
 	if err := s.storage.CreatePost(&post); err != nil {
-		s.writeResponse(w, nil, err)
+		s.writeResponseModelWithError(w, err)
 		return
 	}
 
-	w.WriteHeader(http.StatusCreated)
-	s.writeResponse(
+	s.writeResponseModelWithoutError(
 		w,
 		post,
-		nil,
+		http.StatusCreated,
 	)
 }
 
@@ -253,23 +260,23 @@ func (s *Server) getPostHandler(w router.ResponseWriter, r *router.Request) {
 
 	found, err := s.storage.GetPost(postId)
 	if err != nil {
-		s.writeResponse(w, nil, err)
+		s.writeResponseModelWithError(w, err)
 		return
 	}
-	if found != nil {
-		s.writeResponse(w, *found, nil)
+	if found == nil {
+		w.WriteHeader(http.StatusNotFound)
 		return
 	}
-	s.writeResponse(w, nil, ErrPostNotFound)
+	s.writeResponseModelWithoutError(w, found)
 }
 
 func (s *Server) getPostsHandler(w router.ResponseWriter, _ *router.Request) {
 	posts, err := s.storage.GetPosts()
 	if err != nil {
-		s.writeResponse(w, nil, err)
+		s.writeResponseModelWithError(w, err)
 		return
 	}
-	s.writeResponse(w, posts, nil)
+	s.writeResponseModelWithoutError(w, posts)
 }
 
 func (s *Server) editPostHandler(w router.ResponseWriter, r *router.Request) {
@@ -278,18 +285,18 @@ func (s *Server) editPostHandler(w router.ResponseWriter, r *router.Request) {
 	var edit entities.PostInEditting
 	err := r.ParseBodyInto(&edit)
 	if err != nil {
-		s.writeResponse(w, nil, ErrUnsupportedPost)
+		s.writeResponseModelWithError(w, ErrUnsupportedPost)
 		return
 	}
 	edit.Id = params["id"]
 
 	if edit.Title == nil && edit.Content == nil {
-		s.writeResponse(w, nil, ErrNothingToUpdate)
+		s.writeResponseModelWithError(w, ErrNothingToUpdate)
 		return
 	}
 
 	if _, err := s.storage.EditPost(edit); err != nil {
-		s.writeResponse(w, nil, err)
+		s.writeResponseModelWithError(w, err)
 		return
 	}
 
@@ -299,7 +306,7 @@ func (s *Server) editPostHandler(w router.ResponseWriter, r *router.Request) {
 func (s *Server) deletePostHandler(w router.ResponseWriter, r *router.Request) {
 	postId := r.Params()["id"]
 	if err := s.storage.DeletePost(postId); err != nil {
-		s.writeResponse(w, nil, err)
+		s.writeResponseModelWithError(w, err)
 		return
 	}
 	w.WriteHeader(http.StatusNoContent)
@@ -315,27 +322,27 @@ func (s *Server) getCommentsHandler(w router.ResponseWriter, r *router.Request) 
 	if !hasPost {
 		comments, err := s.storage.GetComments("")
 		if err != nil {
-			s.writeResponse(w, nil, err)
+			s.writeResponseModelWithError(w, err)
 			return
 		}
-		s.writeResponse(w, comments, nil)
+		s.writeResponseModelWithoutError(w, comments)
 		return
 	}
 	if !hasComment {
 		comments, err := s.storage.GetComments(post[0])
 		if err != nil {
-			s.writeResponse(w, nil, err)
+			s.writeResponseModelWithError(w, err)
 			return
 		}
-		s.writeResponse(w, comments, nil)
+		s.writeResponseModelWithoutError(w, comments)
 		return
 	}
 	comments, err := s.storage.GetComment(post[0], comment[0])
 	if err != nil {
-		s.writeResponse(w, nil, err)
+		s.writeResponseModelWithError(w, err)
 		return
 	}
-	s.writeResponse(w, []entities.Comment{*comments}, nil)
+	s.writeResponseModelWithoutError(w, []entities.Comment{*comments})
 }
 
 func (s *Server) getPostCommentHandler(w router.ResponseWriter, r *router.Request) {
@@ -344,26 +351,17 @@ func (s *Server) getPostCommentHandler(w router.ResponseWriter, r *router.Reques
 	pid := params["pid"]
 	cid := params["cid"]
 
-	post, err := s.storage.GetPost(pid)
+	found, err := s.storage.GetComment(pid, cid)
 	if err != nil {
-		s.writeResponse(w, nil, err)
+		s.writeResponseModelWithError(w, err)
 		return
 	}
-	if post == nil {
-		s.writeResponse(w, nil, ErrPostNotFound)
+	if found == nil {
+		w.WriteHeader(http.StatusNotFound)
 		return
 	}
 
-	comment, err := s.storage.GetComment(pid, cid)
-	if err != nil {
-		s.writeResponse(w, nil, err)
-		return
-	}
-	if comment == nil {
-		s.writeResponse(w, nil, ErrCommentNotFound)
-		return
-	}
-	s.writeResponse(w, comment, nil)
+	s.writeResponseModelWithoutError(w, found)
 }
 
 func (s *Server) getPostCommentsHandler(w router.ResponseWriter, r *router.Request) {
@@ -373,11 +371,11 @@ func (s *Server) getPostCommentsHandler(w router.ResponseWriter, r *router.Reque
 
 	comments, err := s.storage.GetComments(pid)
 	if err != nil {
-		s.writeResponse(w, nil, err)
+		s.writeResponseModelWithError(w, err)
 		return
 	}
 
-	s.writeResponse(w, comments, nil)
+	s.writeResponseModelWithoutError(w, comments)
 }
 
 func (s *Server) createPostCommentHandler(w router.ResponseWriter, r *router.Request) {
@@ -387,19 +385,19 @@ func (s *Server) createPostCommentHandler(w router.ResponseWriter, r *router.Req
 	err := r.ParseBodyInto(&comment)
 
 	if err != nil {
-		s.writeResponse(w, nil, ErrUnsupportedComment)
+		s.writeResponseModelWithError(w, ErrUnsupportedComment)
 		return
 	}
 
 	comment.Post = pid
 
 	if err := s.storage.CreateComment(&comment); err != nil {
-		s.writeResponse(w, nil, err)
+		s.writeResponseModelWithError(w, err)
 		return
 	}
 
 	w.WriteHeader(http.StatusCreated)
-	s.writeResponse(w, comment, nil)
+	s.writeResponseModelWithoutError(w, comment)
 }
 
 func (s *Server) editPostCommentHandler(w router.ResponseWriter, r *router.Request) {
@@ -407,7 +405,7 @@ func (s *Server) editPostCommentHandler(w router.ResponseWriter, r *router.Reque
 
 	var edit entities.CommentInEditting
 	if err := r.ParseBodyInto(&edit); err != nil {
-		s.writeResponse(w, nil, ErrUnsupportedComment)
+		s.writeResponseModelWithError(w, ErrUnsupportedComment)
 		return
 	}
 
@@ -415,12 +413,12 @@ func (s *Server) editPostCommentHandler(w router.ResponseWriter, r *router.Reque
 	edit.Id = params["cid"]
 
 	if edit.Content == nil {
-		s.writeResponse(w, nil, ErrNothingToUpdate)
+		s.writeResponseModelWithError(w, ErrNothingToUpdate)
 		return
 	}
 
 	if _, err := s.storage.EditComment(edit); err != nil {
-		s.writeResponse(w, nil, err)
+		s.writeResponseModelWithError(w, err)
 		return
 	}
 
@@ -431,13 +429,13 @@ func (s *Server) deleteCommentHandler(w router.ResponseWriter, r *router.Request
 	params := r.Params()
 
 	if err := s.storage.DeleteComment(params["pid"], params["cid"]); err != nil {
-		s.writeResponse(w, nil, err)
+		s.writeResponseModelWithError(w, err)
 		return
 	}
 
 	w.WriteHeader(http.StatusNoContent)
 }
 
-func writeJSON(w io.Writer, s any) error {
-	return json.NewEncoder(w).Encode(s)
+func writeJSON(w io.Writer, v any) error {
+	return json.NewEncoder(w).Encode(v)
 }

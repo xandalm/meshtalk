@@ -72,10 +72,6 @@ func TestGETPosts(t *testing.T) {
 
 		assertStatus(t, response, http.StatusNotFound)
 
-		got := getErrorFromResponseModel(t, response.Body)
-		want := ErrPostNotFound
-
-		assertGotError(t, got, want)
 	})
 
 	t.Run("returns all posts", func(t *testing.T) {
@@ -218,10 +214,6 @@ func TestPUTPosts(t *testing.T) {
 
 		assertStatus(t, response, http.StatusNotFound)
 
-		got := getErrorFromResponseModel(t, response.Body)
-		want := ErrPostNotFound
-
-		assertGotError(t, got, want)
 	})
 	t.Run("returns 400 and nothing to update error", func(t *testing.T) {
 		request := newEditPostRequest("1", `{}`)
@@ -416,10 +408,6 @@ func TestGETComments(t *testing.T) {
 
 		assertStatus(t, response, http.StatusNotFound)
 
-		got := getErrorFromResponseModel(t, response.Body)
-		want := ErrPostNotFound
-
-		assertGotError(t, got, want)
 	})
 
 	t.Run("returns 404 when try to get comment 3 from post 2", func(t *testing.T) {
@@ -430,10 +418,6 @@ func TestGETComments(t *testing.T) {
 
 		assertStatus(t, response, http.StatusNotFound)
 
-		got := getErrorFromResponseModel(t, response.Body)
-		want := ErrCommentNotFound
-
-		assertGotError(t, got, want)
 	})
 
 	t.Run("returns all comments", func(t *testing.T) {
@@ -516,7 +500,7 @@ func TestPOSTComments(t *testing.T) {
 		}
 	})
 
-	t.Run("returns 404", func(t *testing.T) {
+	t.Run("returns 404 because the post doesn't exist", func(t *testing.T) {
 		request := newCreateCommentRequest("3", `{"content": "Comment Content", "author": "Alex"}`)
 		response := httptest.NewRecorder()
 
@@ -524,10 +508,6 @@ func TestPOSTComments(t *testing.T) {
 
 		assertStatus(t, response, http.StatusNotFound)
 
-		got := getErrorFromResponseModel(t, response.Body)
-		want := ErrPostNotFound
-
-		assertGotError(t, got, want)
 	})
 
 	t.Run("returns 400", func(t *testing.T) {
@@ -609,8 +589,7 @@ func TestPUTComments(t *testing.T) {
 			t.Errorf("didn't update comment")
 		}
 	})
-
-	t.Run("returns 404", func(t *testing.T) {
+	t.Run("returns 404 on nonexistent comment", func(t *testing.T) {
 		request := newEditCommentRequest("1", "3", `{"Content": "Edited Content"}`)
 		response := httptest.NewRecorder()
 
@@ -618,10 +597,15 @@ func TestPUTComments(t *testing.T) {
 
 		assertStatus(t, response, http.StatusNotFound)
 
-		got := getErrorFromResponseModel(t, response.Body)
-		want := ErrCommentNotFound
+	})
+	t.Run("returns 404 because the post doesn't exist", func(t *testing.T) {
+		request := newEditCommentRequest("2", "1", `{"Content": "Edited Content"}`)
+		response := httptest.NewRecorder()
 
-		assertGotError(t, got, want)
+		server.ServeHTTP(response, request)
+
+		assertStatus(t, response, http.StatusNotFound)
+
 	})
 	t.Run("returns 400 and nothing to update error", func(t *testing.T) {
 		request := newEditCommentRequest("1", "1", `{}`)
@@ -691,18 +675,14 @@ func TestDELETEComments(t *testing.T) {
 		}
 	})
 
-	t.Run("returns 404 and a not found post error", func(t *testing.T) {
-		request := newDeleteCommentRequest("2", "2")
+	t.Run("returns 404 because the post doesn't exist", func(t *testing.T) {
+		request := newDeleteCommentRequest("2", "1")
 		response := httptest.NewRecorder()
 
 		server.ServeHTTP(response, request)
 
 		assertStatus(t, response, http.StatusNotFound)
 
-		got := getErrorFromResponseModel(t, response.Body)
-		want := ErrPostNotFound
-
-		assertGotError(t, got, want)
 	})
 
 	t.Run("returns 500", func(t *testing.T) {
@@ -817,7 +797,7 @@ func TestGETCustomers(t *testing.T) {
 		assertGotCustomer(t, got, want)
 	})
 
-	t.Run("returns 404 and not found customer error", func(t *testing.T) {
+	t.Run("returns 404 on nonexistent customer", func(t *testing.T) {
 		request := newGetCustomerRequest("2")
 		response := httptest.NewRecorder()
 
@@ -825,8 +805,6 @@ func TestGETCustomers(t *testing.T) {
 
 		assertStatus(t, response, http.StatusNotFound)
 
-		got := getErrorFromResponseModel(t, response.Body)
-		assertGotError(t, got, ErrCustomerNotFound)
 	})
 
 	t.Run("returns 500", func(t *testing.T) {
@@ -869,7 +847,7 @@ func TestPUTCustomers(t *testing.T) {
 		}
 	})
 
-	t.Run("returns 404", func(t *testing.T) {
+	t.Run("returns 404 on nonexistent customer", func(t *testing.T) {
 		request := newEditCustomerRequest("2", `{"name": "Marie"}`)
 		response := httptest.NewRecorder()
 
@@ -877,8 +855,6 @@ func TestPUTCustomers(t *testing.T) {
 
 		assertStatus(t, response, http.StatusNotFound)
 
-		got := getErrorFromResponseModel(t, response.Body)
-		assertGotError(t, got, ErrCustomerNotFound)
 	})
 
 	t.Run("returns 400 and nothing to update error", func(t *testing.T) {
@@ -972,10 +948,6 @@ func newDate(year int, month time.Month, day, hour, min, sec, mlsec int) string 
 	d := time.Date(year, month, day, hour, min, sec, mlsec*1e6, time.UTC)
 	b, _ := d.MarshalText()
 	return string(b)
-}
-
-func stringAddr(v string) *string {
-	return &v
 }
 
 func newGetPostRequest(id string) *http.Request {
