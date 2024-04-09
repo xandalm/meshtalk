@@ -145,6 +145,9 @@ func (s *stubStorage) CreateComment(comment *entities.Comment) error {
 	if _, hasPost := s.posts[comment.Post]; !hasPost {
 		return storage.ErrPostNotFound
 	}
+	if _, ok := s.customers[comment.Author]; !ok {
+		return storage.ErrUnrecognizedAuthor
+	}
 	_, hasComments := s.comments[comment.Post]
 	if !hasComments {
 		s.comments[comment.Post] = make(map[string]entities.Comment)

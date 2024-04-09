@@ -315,14 +315,14 @@ func TestGETComments(t *testing.T) {
 					Id:        "1",
 					Post:      "1",
 					Content:   "Some comment",
-					Author:    "Alexandre",
+					Author:    "3",
 					CreatedAt: newDate(2024, time.January, 23, 12, 30, 30, 100),
 				},
 				"2": {
 					Id:        "2",
 					Post:      "1",
 					Content:   "Some comment",
-					Author:    "João",
+					Author:    "4",
 					CreatedAt: newDate(2024, time.January, 23, 12, 30, 30, 100),
 				},
 			},
@@ -331,7 +331,7 @@ func TestGETComments(t *testing.T) {
 					Id:        "1",
 					Post:      "2",
 					Content:   "Some comment",
-					Author:    "Maria",
+					Author:    "5",
 					CreatedAt: newDate(2024, time.January, 23, 12, 30, 30, 100),
 				},
 			},
@@ -457,6 +457,12 @@ func TestGETComments(t *testing.T) {
 
 func TestPOSTComments(t *testing.T) {
 	storage := &stubStorage{
+		customers: map[string]entities.Customer{
+			"1": {
+				Id:   "1",
+				Name: "Alex",
+			},
+		},
 		posts: map[string]entities.Post{
 			"1": {
 				Id:        "1",
@@ -478,7 +484,7 @@ func TestPOSTComments(t *testing.T) {
 	server := NewServer(storage)
 
 	t.Run(`returns 201 and comment after create comment`, func(t *testing.T) {
-		request := newCreateCommentRequest("1", `{"content": "Comment Content", "author": "Alex"}`)
+		request := newCreateCommentRequest("1", `{"content": "Comment Content", "author": "1"}`)
 		response := httptest.NewRecorder()
 
 		server.ServeHTTP(response, request)
@@ -490,7 +496,7 @@ func TestPOSTComments(t *testing.T) {
 			Id:      "1",
 			Post:    "1",
 			Content: "Comment Content",
-			Author:  "Alex",
+			Author:  "1",
 		}
 
 		comments, ok := storage.comments["1"]
@@ -518,7 +524,7 @@ func TestPOSTComments(t *testing.T) {
 	})
 
 	t.Run("returns 404 because the post doesn't exist", func(t *testing.T) {
-		request := newCreateCommentRequest("3", `{"content": "Comment Content", "author": "Alex"}`)
+		request := newCreateCommentRequest("3", `{"content": "Comment Content", "author": "1"}`)
 		response := httptest.NewRecorder()
 
 		server.ServeHTTP(response, request)
@@ -556,6 +562,20 @@ func TestPOSTComments(t *testing.T) {
 
 			assertGotError(t, got, want)
 		})
+
+		t.Run("nonexistent author", func(t *testing.T) {
+			request := newCreateCommentRequest("1", `{"content": "Comment Content", "author": "2"}`)
+			response := httptest.NewRecorder()
+
+			server.ServeHTTP(response, request)
+
+			assertStatus(t, response, http.StatusBadRequest)
+
+			got := getErrorFromResponseModel(t, response.Body)
+			want := ErrNonexistentAuthor
+
+			assertGotError(t, got, want)
+		})
 	})
 }
 
@@ -576,14 +596,14 @@ func TestPUTComments(t *testing.T) {
 					Id:        "1",
 					Post:      "1",
 					Content:   "Some comment",
-					Author:    "Alexandre",
+					Author:    "2",
 					CreatedAt: newDate(2024, time.January, 23, 12, 30, 30, 100),
 				},
 				"2": {
 					Id:        "2",
 					Post:      "1",
 					Content:   "Some comment",
-					Author:    "João",
+					Author:    "3",
 					CreatedAt: newDate(2024, time.January, 23, 12, 30, 30, 100),
 				},
 			},
@@ -664,14 +684,14 @@ func TestDELETEComments(t *testing.T) {
 					Id:        "1",
 					Post:      "1",
 					Content:   "Some comment",
-					Author:    "Alexandre",
+					Author:    "2",
 					CreatedAt: newDate(2024, time.January, 23, 12, 30, 30, 100),
 				},
 				"2": {
 					Id:        "2",
 					Post:      "1",
 					Content:   "Some comment",
-					Author:    "João",
+					Author:    "3",
 					CreatedAt: newDate(2024, time.January, 23, 12, 30, 30, 100),
 				},
 			},
