@@ -1,5 +1,6 @@
 package entities
 
+// Represents a post.
 type Post struct {
 	Id        string `json:"id"`
 	Title     string `json:"title"`
@@ -10,6 +11,7 @@ type Post struct {
 	DeletedAt string `json:"deletedAt"`
 }
 
+// Creates a new post representation.
 func NewPost(id, title, content, author string) *Post {
 	return &Post{
 		Id:      id,
@@ -19,6 +21,9 @@ func NewPost(id, title, content, author string) *Post {
 	}
 }
 
+// It's like a helper to expose editable fields of the Post.
+// The editable fields are pointers because this way is possible
+// to keep them optional to be edited.
 type PostInEditting struct {
 	Id      string
 	Title   *string

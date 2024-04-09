@@ -14,6 +14,7 @@ var (
 	ErrMissingCustomerFields = errors.New("storage: name is required for the customer")
 )
 
+// Storage manages the entities data persistence.
 type Storage interface {
 	CreateCustomer(customer *entities.Customer) error
 	GetCustomer(id string) (*entities.Customer, error)
