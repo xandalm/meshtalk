@@ -14,3 +14,8 @@ func NewCustomer(id, name string) *Customer {
 		Name: name,
 	}
 }
+
+type CustomerInEditting struct {
+	Id   string
+	Name *string
+}

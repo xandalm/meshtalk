@@ -17,16 +17,16 @@ var (
 type Storage interface {
 	CreateCustomer(customer *entities.Customer) error
 	GetCustomer(id string) (*entities.Customer, error)
-	EditCustomer(customer *entities.Customer) error
+	EditCustomer(edit entities.CustomerInEditting) (*entities.Customer, error)
 	DeleteCustomer(id string) error
 	GetPost(id string) (*entities.Post, error)
 	GetPosts() ([]entities.Post, error)
 	CreatePost(post *entities.Post) error
-	EditPost(post *entities.Post) error
+	EditPost(edit entities.PostInEditting) (*entities.Post, error)
 	DeletePost(id string) error
 	GetComments(post string) ([]entities.Comment, error)
 	GetComment(post, id string) (*entities.Comment, error)
 	CreateComment(comment *entities.Comment) error
-	EditComment(comment *entities.Comment) error
+	EditComment(edit entities.CommentInEditting) (*entities.Comment, error)
 	DeleteComment(post, id string) error
 }

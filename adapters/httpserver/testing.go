@@ -8,6 +8,7 @@ import (
 	"net/http/httptest"
 	"reflect"
 	"strconv"
+	"strings"
 	"testing"
 	"time"
 )
@@ -71,13 +72,23 @@ func timeToString(t time.Time) string {
 	return string(b)
 }
 
-func (s *stubStorage) EditPost(post *entities.Post) error {
-	_, ok := s.posts[post.Id]
+func (s *stubStorage) EditPost(edit entities.PostInEditting) (*entities.Post, error) {
+	_, ok := s.posts[edit.Id]
 	if !ok {
-		return storage.ErrPostNotFound
+		return nil, storage.ErrPostNotFound
 	}
-	s.postEditCalls = append(s.postEditCalls, fmt.Sprintf("%+v", *post))
-	return nil
+	builder := strings.Builder{}
+	builder.WriteString(fmt.Sprintf("Id=%q", edit.Id))
+	if edit.Title != nil {
+		builder.WriteString(", ")
+		builder.WriteString(fmt.Sprintf("Title=%q", *edit.Title))
+	}
+	if edit.Content != nil {
+		builder.WriteString(", ")
+		builder.WriteString(fmt.Sprintf("Content=%q", *edit.Content))
+	}
+	s.postEditCalls = append(s.postEditCalls, builder.String())
+	return nil, nil
 }
 
 func (s *stubStorage) DeletePost(id string) error {
@@ -141,16 +152,24 @@ func (s *stubStorage) CreateComment(comment *entities.Comment) error {
 	return nil
 }
 
-func (s *stubStorage) EditComment(comment *entities.Comment) error {
-	comments, ok := s.comments[comment.Post]
+func (s *stubStorage) EditComment(edit entities.CommentInEditting) (*entities.Comment, error) {
+	comments, ok := s.comments[edit.Post]
 	if !ok {
-		return storage.ErrPostNotFound
+		return nil, storage.ErrPostNotFound
 	}
-	if _, ok := comments[comment.Id]; !ok {
-		return storage.ErrCommentNotFound
+	if _, ok := comments[edit.Id]; !ok {
+		return nil, storage.ErrCommentNotFound
 	}
-	s.commentEditCalls = append(s.commentEditCalls, fmt.Sprintf("%+v", *comment))
-	return nil
+	builder := strings.Builder{}
+	builder.WriteString(fmt.Sprintf("Post=%q", edit.Post))
+	builder.WriteString(", ")
+	builder.WriteString(fmt.Sprintf("Id=%q", edit.Id))
+	if edit.Content != nil {
+		builder.WriteString(", ")
+		builder.WriteString(fmt.Sprintf("Content=%q", *edit.Content))
+	}
+	s.commentEditCalls = append(s.commentEditCalls, builder.String())
+	return nil, nil
 }
 
 func (s *stubStorage) DeleteComment(post, id string) error {
@@ -186,15 +205,21 @@ func (s *stubStorage) GetCustomer(id string) (*entities.Customer, error) {
 	}, nil
 }
 
-func (s *stubStorage) EditCustomer(customer *entities.Customer) error {
-	if _, ok := s.customers[customer.Id]; !ok {
-		return storage.ErrCustomerNotFound
+func (s *stubStorage) EditCustomer(edit entities.CustomerInEditting) (*entities.Customer, error) {
+	if _, ok := s.customers[edit.Id]; !ok {
+		return nil, storage.ErrCustomerNotFound
 	}
-	if customer.Name == "" {
-		return storage.ErrMissingCustomerFields
+	if edit.Name == nil || *edit.Name == "" {
+		return nil, storage.ErrMissingCustomerFields
 	}
-	s.customerEditCalls = append(s.customerEditCalls, fmt.Sprintf("%+v", *customer))
-	return nil
+	builder := strings.Builder{}
+	builder.WriteString(fmt.Sprintf("Id=%q", edit.Id))
+	if edit.Name != nil {
+		builder.WriteString(", ")
+		builder.WriteString(fmt.Sprintf("Name=%q", *edit.Name))
+	}
+	s.customerEditCalls = append(s.customerEditCalls, builder.String())
+	return nil, nil
 }
 
 func (s *stubStorage) DeleteCustomer(id string) error {
@@ -220,8 +245,8 @@ func (s *stubFailingStorage) CreatePost(post *entities.Post) error {
 	return errFoo
 }
 
-func (s *stubFailingStorage) EditPost(post *entities.Post) error {
-	return errFoo
+func (s *stubFailingStorage) EditPost(edit entities.PostInEditting) (*entities.Post, error) {
+	return nil, errFoo
 }
 
 func (s *stubFailingStorage) DeletePost(id string) error {
@@ -240,8 +265,8 @@ func (s *stubFailingStorage) CreateComment(comment *entities.Comment) error {
 	return errFoo
 }
 
-func (s *stubFailingStorage) EditComment(comment *entities.Comment) error {
-	return errFoo
+func (s *stubFailingStorage) EditComment(edit entities.CommentInEditting) (*entities.Comment, error) {
+	return nil, errFoo
 }
 
 func (s *stubFailingStorage) DeleteComment(post, id string) error {
@@ -256,8 +281,8 @@ func (s *stubFailingStorage) GetCustomer(id string) (*entities.Customer, error) 
 	return nil, errFoo
 }
 
-func (s *stubFailingStorage) EditCustomer(customer *entities.Customer) error {
-	return errFoo
+func (s *stubFailingStorage) EditCustomer(edit entities.CustomerInEditting) (*entities.Customer, error) {
+	return nil, errFoo
 }
 
 func (s *stubFailingStorage) DeleteCustomer(id string) error {
@@ -268,16 +293,16 @@ type mockStorage struct {
 	GetPostFunc        func(id string) (*entities.Post, error)
 	GetPostsFunc       func() ([]entities.Post, error)
 	CreatePostFunc     func(post *entities.Post) error
-	EditPostFunc       func(post *entities.Post) error
+	EditPostFunc       func(edit entities.PostInEditting) (*entities.Post, error)
 	DeletePostFunc     func(id string) error
 	GetCommentsFunc    func(post string) ([]entities.Comment, error)
 	GetCommentFunc     func(post, id string) (*entities.Comment, error)
 	CreateCommentFunc  func(comment *entities.Comment) error
-	EditCommentFunc    func(comment *entities.Comment) error
+	EditCommentFunc    func(edit entities.CommentInEditting) (*entities.Comment, error)
 	DeleteCommentFunc  func(post, id string) error
 	CreateCustomerFunc func(customer *entities.Customer) error
 	GetCustomerFunc    func(id string) (*entities.Customer, error)
-	EditCustomerFunc   func(customer *entities.Customer) error
+	EditCustomerFunc   func(edit entities.CustomerInEditting) (*entities.Customer, error)
 	DeleteCustomerFunc func(id string) error
 }
 
@@ -293,8 +318,8 @@ func (s *mockStorage) CreatePost(post *entities.Post) error {
 	return s.CreatePostFunc(post)
 }
 
-func (s *mockStorage) EditPost(post *entities.Post) error {
-	return s.EditPostFunc(post)
+func (s *mockStorage) EditPost(edit entities.PostInEditting) (*entities.Post, error) {
+	return s.EditPostFunc(edit)
 }
 
 func (s *mockStorage) DeletePost(id string) error {
@@ -313,8 +338,8 @@ func (s *mockStorage) CreateComment(comment *entities.Comment) error {
 	return s.CreateCommentFunc(comment)
 }
 
-func (s *mockStorage) EditComment(comment *entities.Comment) error {
-	return s.EditCommentFunc(comment)
+func (s *mockStorage) EditComment(edit entities.CommentInEditting) (*entities.Comment, error) {
+	return s.EditCommentFunc(edit)
 }
 
 func (s *mockStorage) DeleteComment(post, id string) error {
@@ -329,8 +354,8 @@ func (s *mockStorage) GetCustomer(id string) (*entities.Customer, error) {
 	return s.GetCustomerFunc(id)
 }
 
-func (s *mockStorage) EditCustomer(customer *entities.Customer) error {
-	return s.EditCustomerFunc(customer)
+func (s *mockStorage) EditCustomer(edit entities.CustomerInEditting) (*entities.Customer, error) {
+	return s.EditCustomerFunc(edit)
 }
 
 func (s *mockStorage) DeleteCustomer(id string) error {

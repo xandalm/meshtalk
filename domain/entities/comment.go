@@ -18,3 +18,9 @@ func NewComment(id, post, content, author string) *Comment {
 		Author:  author,
 	}
 }
+
+type CommentInEditting struct {
+	Post    string
+	Id      string
+	Content *string
+}

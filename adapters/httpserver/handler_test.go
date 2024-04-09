@@ -3,7 +3,6 @@ package httpserver
 import (
 	"bytes"
 	"encoding/json"
-	"fmt"
 	"io"
 	"meshtalk/domain/entities"
 	"net/http"
@@ -207,7 +206,7 @@ func TestPUTPosts(t *testing.T) {
 
 		if !slices.Contains(
 			storage.postEditCalls,
-			fmt.Sprintf("%+v", entities.Post{Id: "1", Content: "Edited Content"}),
+			`Id="1", Content="Edited Content"`,
 		) {
 			t.Errorf("didn't update post")
 		}
@@ -596,7 +595,7 @@ func TestPUTComments(t *testing.T) {
 
 		if !slices.Contains(
 			storage.commentEditCalls,
-			fmt.Sprintf("%+v", entities.Comment{Post: "1", Id: "1", Content: "Edited Content"}),
+			`Post="1", Id="1", Content="Edited Content"`,
 		) {
 			t.Errorf("didn't update comment")
 		}
@@ -845,7 +844,7 @@ func TestPUTCustomers(t *testing.T) {
 
 		if !slices.Contains(
 			storage.customerEditCalls,
-			fmt.Sprintf("%+v", entities.Customer{Id: "1", Name: "Jhonny"}),
+			`Id="1", Name="Jhonny"`,
 		) {
 			t.Errorf("didn't update customer")
 		}
@@ -954,6 +953,10 @@ func newDate(year int, month time.Month, day, hour, min, sec, mlsec int) string 
 	d := time.Date(year, month, day, hour, min, sec, mlsec*1e6, time.UTC)
 	b, _ := d.MarshalText()
 	return string(b)
+}
+
+func stringAddr(v string) *string {
+	return &v
 }
 
 func newGetPostRequest(id string) *http.Request {

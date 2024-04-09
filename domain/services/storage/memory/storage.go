@@ -1,7 +1,6 @@
 package memory
 
 import (
-	"fmt"
 	"meshtalk/domain/entities"
 	"meshtalk/domain/services/storage"
 	"strconv"
@@ -9,13 +8,17 @@ import (
 )
 
 type Storage struct {
-	posts_pk int
-	posts    map[string]entities.Post
-	comments map[string]map[string]entities.Comment
+	customers_pk int
+	customers    map[string]entities.Customer
+	posts_pk     int
+	posts        map[string]entities.Post
+	comments     map[string]map[string]entities.Comment
 }
 
 func NewStorage() *Storage {
 	return &Storage{
+		1,
+		map[string]entities.Customer{},
 		1,
 		map[string]entities.Post{},
 		map[string]map[string]entities.Comment{},
@@ -34,7 +37,6 @@ func (s *Storage) GetPost(id string) (*entities.Post, error) {
 		Author:    found.Author,
 		CreatedAt: found.CreatedAt,
 		UpdatedAt: found.UpdatedAt,
-		DeletedAt: found.DeletedAt,
 	}, nil
 }
 
@@ -69,21 +71,29 @@ func (s *Storage) CreatePost(post *entities.Post) error {
 	return nil
 }
 
-func (s *Storage) EditPost(post *entities.Post) error {
-	found, ok := s.posts[post.Id]
+func (s *Storage) EditPost(edit entities.PostInEditting) (*entities.Post, error) {
+	found, ok := s.posts[edit.Id]
 	if !ok || found.DeletedAt != "" {
-		return storage.ErrPostNotFound
+		return nil, storage.ErrPostNotFound
 	}
 
-	if (found.Title != post.Title && post.Title == "") ||
-		(found.Content != post.Content && post.Content == "") ||
-		(found.Author != post.Author && post.Author == "") {
-		return storage.ErrMissingPostFields
+	if edit.Title != nil {
+		if *edit.Title == "" {
+			return nil, storage.ErrMissingPostFields
+		}
+		found.Title = *edit.Title
 	}
 
-	post.UpdatedAt = timeToString(time.Now())
-	s.posts[post.Id] = *post
-	return nil
+	if edit.Content != nil {
+		if *edit.Content == "" {
+			return nil, storage.ErrMissingPostFields
+		}
+		found.Content = *edit.Content
+	}
+
+	found.UpdatedAt = timeToString(time.Now())
+	s.posts[found.Id] = found
+	return &found, nil
 }
 
 func (s *Storage) DeletePost(id string) error {
@@ -124,7 +134,6 @@ func (s *Storage) GetComment(post, comment string) (*entities.Comment, error) {
 			Author:    found.Author,
 			CreatedAt: found.CreatedAt,
 			UpdatedAt: found.UpdatedAt,
-			DeletedAt: found.DeletedAt,
 		}, nil
 	}
 	return nil, storage.ErrPostNotFound
@@ -150,31 +159,87 @@ func (s *Storage) CreateComment(c *entities.Comment) error {
 	return nil
 }
 
-func (s *Storage) EditComment(c *entities.Comment) error {
-	if comments, hasComments := s.comments[c.Post]; hasComments {
-		if found, hasComment := comments[c.Id]; hasComment {
+func (s *Storage) EditComment(edit entities.CommentInEditting) (*entities.Comment, error) {
+	if comments, hasComments := s.comments[edit.Post]; hasComments {
+		if found, hasComment := comments[edit.Id]; hasComment && found.DeletedAt == "" {
 
-			if (found.Content != c.Content && c.Content == "") ||
-				(found.Author != c.Author && c.Author == "") {
-				return storage.ErrMissingCommentFields
+			if edit.Content != nil {
+				if *edit.Content == "" {
+					return nil, storage.ErrMissingCommentFields
+				}
+				found.Content = *edit.Content
 			}
 
-			c.UpdatedAt = timeToString(time.Now())
-			comments[c.Id] = *c
-			return nil
+			found.UpdatedAt = timeToString(time.Now())
+			comments[found.Id] = found
+			return &found, nil
 		}
 	}
-	return storage.ErrCommentNotFound
+	return nil, storage.ErrCommentNotFound
 }
 
 func (s *Storage) DeleteComment(post, id string) error {
-	return fmt.Errorf("not implemented")
+	if comments, hasComments := s.comments[post]; hasComments {
+		comment, hasComment := comments[id]
+		if !hasComment {
+			return storage.ErrCommentNotFound
+		}
+		comment.DeletedAt = timeToString(time.Now())
+		comments[id] = comment
+		return nil
+	}
+	return storage.ErrPostNotFound
 }
 
-func (s *Storage) CreateCustomer(customer *entities.Customer) error {
-	return fmt.Errorf("not implemented")
+func (s *Storage) CreateCustomer(c *entities.Customer) error {
+
+	if c.Name == "" {
+		return storage.ErrMissingCustomerFields
+	}
+
+	c.Id = strconv.Itoa(s.customers_pk)
+	c.CreatedAt = timeToString(time.Now())
+	s.customers[c.Id] = *c
+	s.customers_pk++
+	return nil
 }
 
 func (s *Storage) GetCustomer(id string) (*entities.Customer, error) {
-	return nil, fmt.Errorf("not implemented")
+	found, ok := s.customers[id]
+	if !ok || found.DeletedAt != "" {
+		return nil, nil
+	}
+	return &entities.Customer{
+		Id:        found.Id,
+		Name:      found.Name,
+		CreatedAt: found.CreatedAt,
+		UpdatedAt: found.UpdatedAt,
+	}, nil
+}
+
+func (s *Storage) EditCustomer(edit entities.CustomerInEditting) (*entities.Customer, error) {
+	found, ok := s.customers[edit.Id]
+	if !ok || found.DeletedAt != "" {
+		return nil, storage.ErrCustomerNotFound
+	}
+	if edit.Name != nil {
+		if *edit.Name == "" {
+			return nil, storage.ErrMissingCustomerFields
+		}
+		found.Name = *edit.Name
+	}
+
+	found.UpdatedAt = timeToString(time.Now())
+	s.customers[found.Id] = found
+	return &found, nil
+}
+
+func (s *Storage) DeleteCustomer(id string) error {
+	customer, ok := s.customers[id]
+	if !ok {
+		return storage.ErrCustomerNotFound
+	}
+	customer.DeletedAt = timeToString(time.Now())
+	s.customers[id] = customer
+	return nil
 }

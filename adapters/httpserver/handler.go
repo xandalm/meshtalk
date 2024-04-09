@@ -194,16 +194,16 @@ func (s *Server) getCustomerHandler(w router.ResponseWriter, r *router.Request) 
 }
 
 func (s *Server) editCustomerHandler(w router.ResponseWriter, r *router.Request) {
-	customerId := r.Params()["id"]
+	params := r.Params()
 
-	var customer entities.Customer
-	if err := r.ParseBodyInto(&customer); err != nil {
+	var edit entities.CustomerInEditting
+	if err := r.ParseBodyInto(&edit); err != nil {
 		s.writeResponse(w, nil, ErrUnsupportedCustomer)
 		return
 	}
-	customer.Id = customerId
+	edit.Id = params["id"]
 
-	if err := s.storage.EditCustomer(&customer); err != nil {
+	if _, err := s.storage.EditCustomer(edit); err != nil {
 		s.writeResponse(w, nil, err)
 	}
 
@@ -265,17 +265,17 @@ func (s *Server) getPostsHandler(w router.ResponseWriter, _ *router.Request) {
 }
 
 func (s *Server) editPostHandler(w router.ResponseWriter, r *router.Request) {
-	postId := r.Params()["id"]
+	params := r.Params()
 
-	var post entities.Post
-	err := r.ParseBodyInto(&post)
+	var edit entities.PostInEditting
+	err := r.ParseBodyInto(&edit)
 	if err != nil {
 		s.writeResponse(w, nil, ErrUnsupportedPost)
 		return
 	}
-	post.Id = postId
+	edit.Id = params["id"]
 
-	if err := s.storage.EditPost(&post); err != nil {
+	if _, err := s.storage.EditPost(edit); err != nil {
 		s.writeResponse(w, nil, err)
 		return
 	}
@@ -392,16 +392,16 @@ func (s *Server) createPostCommentHandler(w router.ResponseWriter, r *router.Req
 func (s *Server) editPostCommentHandler(w router.ResponseWriter, r *router.Request) {
 	params := r.Params()
 
-	var comment entities.Comment
-	if err := r.ParseBodyInto(&comment); err != nil {
+	var edit entities.CommentInEditting
+	if err := r.ParseBodyInto(&edit); err != nil {
 		s.writeResponse(w, nil, ErrUnsupportedComment)
 		return
 	}
 
-	comment.Post = params["pid"]
-	comment.Id = params["cid"]
+	edit.Post = params["pid"]
+	edit.Id = params["cid"]
 
-	if err := s.storage.EditComment(&comment); err != nil {
+	if _, err := s.storage.EditComment(edit); err != nil {
 		s.writeResponse(w, nil, err)
 		return
 	}

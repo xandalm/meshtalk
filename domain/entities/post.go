@@ -18,3 +18,9 @@ func NewPost(id, title, content, author string) *Post {
 		Author:  author,
 	}
 }
+
+type PostInEditting struct {
+	Id      string
+	Title   *string
+	Content *string
+}
