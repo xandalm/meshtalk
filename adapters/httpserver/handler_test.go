@@ -196,8 +196,7 @@ func TestPUTPosts(t *testing.T) {
 	server := NewServer(storage)
 
 	t.Run("returns 204 on post edited", func(t *testing.T) {
-		jsonRaw := `{"Content": "Edited Content"}`
-		request := newEditPostRequest("1", jsonRaw)
+		request := newEditPostRequest("1", `{"Content": "Edited Content"}`)
 		response := httptest.NewRecorder()
 
 		server.ServeHTTP(response, request)
@@ -212,8 +211,7 @@ func TestPUTPosts(t *testing.T) {
 		}
 	})
 	t.Run("returns 404 on nonexistent post", func(t *testing.T) {
-		jsonRaw := `{"Content": "Edited Content"}`
-		request := newEditPostRequest("3", jsonRaw)
+		request := newEditPostRequest("3", `{"Content": "Edited Content"}`)
 		response := httptest.NewRecorder()
 
 		server.ServeHTTP(response, request)
@@ -224,6 +222,17 @@ func TestPUTPosts(t *testing.T) {
 		want := ErrPostNotFound
 
 		assertGotError(t, got, want)
+	})
+	t.Run("returns 400 and nothing to update error", func(t *testing.T) {
+		request := newEditPostRequest("1", `{}`)
+		response := httptest.NewRecorder()
+
+		server.ServeHTTP(response, request)
+
+		assertStatus(t, response, http.StatusBadRequest)
+
+		got := getErrorFromResponseModel(t, response.Body)
+		assertGotError(t, got, ErrNothingToUpdate)
 	})
 	t.Run("returns 500 on unexpected error", func(t *testing.T) {
 		storage := &stubFailingStorage{
@@ -614,7 +623,17 @@ func TestPUTComments(t *testing.T) {
 
 		assertGotError(t, got, want)
 	})
+	t.Run("returns 400 and nothing to update error", func(t *testing.T) {
+		request := newEditCommentRequest("1", "1", `{}`)
+		response := httptest.NewRecorder()
 
+		server.ServeHTTP(response, request)
+
+		assertStatus(t, response, http.StatusBadRequest)
+
+		got := getErrorFromResponseModel(t, response.Body)
+		assertGotError(t, got, ErrNothingToUpdate)
+	})
 	t.Run("returns 500", func(t *testing.T) {
 		storage := &stubFailingStorage{}
 		server := NewServer(storage)
@@ -862,7 +881,7 @@ func TestPUTCustomers(t *testing.T) {
 		assertGotError(t, got, ErrCustomerNotFound)
 	})
 
-	t.Run("returns 400", func(t *testing.T) {
+	t.Run("returns 400 and nothing to update error", func(t *testing.T) {
 		request := newEditCustomerRequest("1", `{}`)
 		response := httptest.NewRecorder()
 
@@ -871,7 +890,7 @@ func TestPUTCustomers(t *testing.T) {
 		assertStatus(t, response, http.StatusBadRequest)
 
 		got := getErrorFromResponseModel(t, response.Body)
-		assertGotError(t, got, ErrMissingCustomerFields)
+		assertGotError(t, got, ErrNothingToUpdate)
 	})
 
 	t.Run("returns 500", func(t *testing.T) {

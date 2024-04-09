@@ -45,6 +45,7 @@ const (
 	ErrUnsupportedCustomerMessage   = "unsupported data to parse as customer"
 	ErrMissingCustomerFieldsMessage = "missing customer fields (name is required)"
 	ErrCustomerNotFoundMessage      = "there is no such customer here"
+	ErrNothingToUpdateMessage       = "no changes to be updated"
 )
 
 var (
@@ -57,6 +58,7 @@ var (
 	ErrUnsupportedCustomer   = NewError("ERR_UNSUPPORTED_CUSTOMER", ErrUnsupportedCustomerMessage)
 	ErrMissingCustomerFields = NewError("ERR_MISSING_CUSTOMER_FIELDS", ErrMissingCustomerFieldsMessage)
 	ErrCustomerNotFound      = NewError("ERR_CUSTOMER_NOT_FOUND", ErrCustomerNotFoundMessage)
+	ErrNothingToUpdate       = NewError("ERR_NOTHING_TO_UPDATE", ErrNothingToUpdateMessage)
 
 	mErrors = map[error]*Error{
 		storage.ErrPostNotFound:          ErrPostNotFound,
@@ -126,7 +128,8 @@ func (s *Server) writeResponse(w http.ResponseWriter, data any, err error) {
 			ErrMissingCustomerFields,
 			ErrUnsupportedPost,
 			ErrUnsupportedComment,
-			ErrUnsupportedCustomer:
+			ErrUnsupportedCustomer,
+			ErrNothingToUpdate:
 			w.WriteHeader(http.StatusBadRequest)
 		default:
 			w.WriteHeader(http.StatusInternalServerError)
@@ -203,6 +206,11 @@ func (s *Server) editCustomerHandler(w router.ResponseWriter, r *router.Request)
 	}
 	edit.Id = params["id"]
 
+	if edit.Name == nil {
+		s.writeResponse(w, nil, ErrNothingToUpdate)
+		return
+	}
+
 	if _, err := s.storage.EditCustomer(edit); err != nil {
 		s.writeResponse(w, nil, err)
 	}
@@ -274,6 +282,11 @@ func (s *Server) editPostHandler(w router.ResponseWriter, r *router.Request) {
 		return
 	}
 	edit.Id = params["id"]
+
+	if edit.Title == nil && edit.Content == nil {
+		s.writeResponse(w, nil, ErrNothingToUpdate)
+		return
+	}
 
 	if _, err := s.storage.EditPost(edit); err != nil {
 		s.writeResponse(w, nil, err)
@@ -400,6 +413,11 @@ func (s *Server) editPostCommentHandler(w router.ResponseWriter, r *router.Reque
 
 	edit.Post = params["pid"]
 	edit.Id = params["cid"]
+
+	if edit.Content == nil {
+		s.writeResponse(w, nil, ErrNothingToUpdate)
+		return
+	}
 
 	if _, err := s.storage.EditComment(edit); err != nil {
 		s.writeResponse(w, nil, err)
