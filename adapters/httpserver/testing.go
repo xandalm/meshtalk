@@ -61,6 +61,9 @@ func (s *stubStorage) CreatePost(post *entities.Post) error {
 	if post.Title == "" || post.Content == "" || post.Author == "" {
 		return storage.ErrMissingPostFields
 	}
+	if _, ok := s.customers[post.Author]; !ok {
+		return storage.ErrUnrecognizedAuthor
+	}
 	post.Id = strconv.Itoa(len(s.posts) + 1)
 	post.CreatedAt = timeToString(time.Now())
 	s.posts[post.Id] = *post

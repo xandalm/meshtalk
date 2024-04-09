@@ -20,14 +20,14 @@ func TestGETPosts(t *testing.T) {
 				Id:        "1",
 				Title:     "Post 1",
 				Content:   "Post Content",
-				Author:    "Alex",
+				Author:    "1",
 				CreatedAt: newDate(2023, time.December, 4, 16, 30, 30, 100),
 			},
 			"2": {
 				Id:        "2",
 				Title:     "Post 2",
 				Content:   "Post Content",
-				Author:    "Andre",
+				Author:    "2",
 				CreatedAt: newDate(2023, time.December, 4, 17, 0, 0, 0),
 			},
 		},
@@ -99,11 +99,19 @@ func TestGETPosts(t *testing.T) {
 }
 
 func TestPOSTPosts(t *testing.T) {
-	storage := NewStubStorage()
+	storage := &stubStorage{
+		customers: map[string]entities.Customer{
+			"1": {
+				Id:   "1",
+				Name: "Alex",
+			},
+		},
+		posts: map[string]entities.Post{},
+	}
 	server := NewServer(storage)
 
 	t.Run(`returns 201 and post after create post`, func(t *testing.T) {
-		request := newCreatePostRequest(`{"title": "Post X", "content": "Post Content", "author": "Alex"}`)
+		request := newCreatePostRequest(`{"title": "Post X", "content": "Post Content", "author": "1"}`)
 		response := httptest.NewRecorder()
 
 		server.ServeHTTP(response, request)
@@ -116,7 +124,7 @@ func TestPOSTPosts(t *testing.T) {
 			Id:      "1",
 			Title:   "Post X",
 			Content: "Post Content",
-			Author:  "Alex",
+			Author:  "1",
 		}
 
 		if _, ok := storage.posts["1"]; !ok {
@@ -138,36 +146,45 @@ func TestPOSTPosts(t *testing.T) {
 		}
 	})
 
-	t.Run("returns 400 when request with incompatible json data", func(t *testing.T) {
+	t.Run("returns 400 and unsupported error", func(t *testing.T) {
+		request := newCreatePostRequest(`data`)
+		response := httptest.NewRecorder()
 
-		t.Run("returns 400 and unsupported error", func(t *testing.T) {
-			request := newCreatePostRequest(`data`)
-			response := httptest.NewRecorder()
+		server.ServeHTTP(response, request)
 
-			server.ServeHTTP(response, request)
+		assertStatus(t, response, http.StatusBadRequest)
 
-			assertStatus(t, response, http.StatusBadRequest)
+		got := getErrorFromResponseModel(t, response.Body)
+		want := ErrUnsupportedPost
 
-			got := getErrorFromResponseModel(t, response.Body)
-			want := ErrUnsupportedPost
-
-			assertGotError(t, got, want)
-		})
-		t.Run("returns 400 and missing fields error", func(t *testing.T) {
-			request := newCreatePostRequest(`{}`)
-			response := httptest.NewRecorder()
-
-			server.ServeHTTP(response, request)
-
-			assertStatus(t, response, http.StatusBadRequest)
-
-			got := getErrorFromResponseModel(t, response.Body)
-			want := ErrMissingPostFields
-
-			assertGotError(t, got, want)
-		})
+		assertGotError(t, got, want)
 	})
+	t.Run("returns 400 and missing fields error", func(t *testing.T) {
+		request := newCreatePostRequest(`{}`)
+		response := httptest.NewRecorder()
 
+		server.ServeHTTP(response, request)
+
+		assertStatus(t, response, http.StatusBadRequest)
+
+		got := getErrorFromResponseModel(t, response.Body)
+		want := ErrMissingPostFields
+
+		assertGotError(t, got, want)
+	})
+	t.Run("returns 400 because nonexistent author", func(t *testing.T) {
+		request := newCreatePostRequest(`{"title": "Post X", "content": "Post Content", "author": "2"}`)
+		response := httptest.NewRecorder()
+
+		server.ServeHTTP(response, request)
+
+		assertStatus(t, response, http.StatusBadRequest)
+
+		got := getErrorFromResponseModel(t, response.Body)
+		want := ErrNonexistentAuthor
+
+		assertGotError(t, got, want)
+	})
 	t.Run("returns 500 on unexpected error", func(t *testing.T) {
 		storage := &stubFailingStorage{}
 		server := NewServer(storage)
@@ -185,8 +202,8 @@ func TestPOSTPosts(t *testing.T) {
 func TestPUTPosts(t *testing.T) {
 	storage := &stubStorage{
 		posts: map[string]entities.Post{
-			"1": *entities.NewPost("1", "Post 1", "Post Content", "Alex"),
-			"2": *entities.NewPost("2", "Post 2", "Post Content", "Andre"),
+			"1": *entities.NewPost("1", "Post 1", "Post Content", "1"),
+			"2": *entities.NewPost("2", "Post 2", "Post Content", "2"),
 		},
 	}
 	server := NewServer(storage)
@@ -229,7 +246,7 @@ func TestPUTPosts(t *testing.T) {
 	t.Run("returns 500 on unexpected error", func(t *testing.T) {
 		storage := &stubFailingStorage{
 			posts: map[string]entities.Post{
-				"1": *entities.NewPost("1", "Post 1", "Post Content", "Alex"),
+				"1": *entities.NewPost("1", "Post 1", "Post Content", "1"),
 			},
 		}
 		server := NewServer(storage)
@@ -247,7 +264,7 @@ func TestDELETEPosts(t *testing.T) {
 	t.Run("returns 200 on post deleted", func(t *testing.T) {
 		storage := &stubStorage{
 			posts: map[string]entities.Post{
-				"1": *entities.NewPost("1", "Post 1", "Post Content", "Alex"),
+				"1": *entities.NewPost("1", "Post 1", "Post Content", "1"),
 			},
 		}
 		server := NewServer(storage)
@@ -281,14 +298,14 @@ func TestGETComments(t *testing.T) {
 				Id:        "1",
 				Title:     "Post 1",
 				Content:   "Post Content",
-				Author:    "Alex",
+				Author:    "1",
 				CreatedAt: newDate(2023, time.December, 4, 16, 30, 30, 100),
 			},
 			"2": {
 				Id:        "2",
 				Title:     "Post 2",
 				Content:   "Post Content",
-				Author:    "Andre",
+				Author:    "2",
 				CreatedAt: newDate(2023, time.December, 4, 17, 0, 0, 0),
 			},
 		},
@@ -445,14 +462,14 @@ func TestPOSTComments(t *testing.T) {
 				Id:        "1",
 				Title:     "Post 1",
 				Content:   "Post Content",
-				Author:    "Alex",
+				Author:    "1",
 				CreatedAt: newDate(2023, time.December, 4, 16, 30, 30, 100),
 			},
 			"2": {
 				Id:        "2",
 				Title:     "Post 2",
 				Content:   "Post Content",
-				Author:    "Andre",
+				Author:    "2",
 				CreatedAt: newDate(2023, time.December, 4, 17, 0, 0, 0),
 			},
 		},
@@ -549,7 +566,7 @@ func TestPUTComments(t *testing.T) {
 				Id:        "1",
 				Title:     "Post 1",
 				Content:   "Post Content",
-				Author:    "Alex",
+				Author:    "1",
 				CreatedAt: newDate(2023, time.December, 4, 16, 30, 30, 100),
 			},
 		},
@@ -637,7 +654,7 @@ func TestDELETEComments(t *testing.T) {
 				Id:        "1",
 				Title:     "Post 1",
 				Content:   "Post Content",
-				Author:    "Alex",
+				Author:    "1",
 				CreatedAt: newDate(2023, time.December, 4, 16, 30, 30, 100),
 			},
 		},

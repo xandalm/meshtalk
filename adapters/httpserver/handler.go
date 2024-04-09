@@ -36,16 +36,14 @@ type ResponseModel struct {
 }
 
 const (
-	ErrPostNotFoundMessage          = "there is no such post here"
 	ErrUnsupportedPostMessage       = "unsupported data to parse as post"
 	ErrMissingPostFieldsMessage     = "missing post fields (title, content and author are required)"
 	ErrUnsupportedCommentMessage    = "unsupported data to parse as comment"
 	ErrMissingCommentFieldsMessage  = "missing comment fields (content and author are required)"
-	ErrCommentNotFoundMessage       = "there is no such comment here"
 	ErrUnsupportedCustomerMessage   = "unsupported data to parse as customer"
 	ErrMissingCustomerFieldsMessage = "missing customer fields (name is required)"
-	ErrCustomerNotFoundMessage      = "there is no such customer here"
 	ErrNothingToUpdateMessage       = "no changes to be updated"
+	ErrNonexistentCustomerMessage   = "the given author doesn't exist"
 )
 
 var (
@@ -56,6 +54,7 @@ var (
 	ErrUnsupportedCustomer   = NewError("ERR_UNSUPPORTED_CUSTOMER", ErrUnsupportedCustomerMessage)
 	ErrMissingCustomerFields = NewError("ERR_MISSING_CUSTOMER_FIELDS", ErrMissingCustomerFieldsMessage)
 	ErrNothingToUpdate       = NewError("ERR_NOTHING_TO_UPDATE", ErrNothingToUpdateMessage)
+	ErrNonexistentAuthor     = NewError("ERR_NONEXISTENT_AUTHOR", ErrNonexistentCustomerMessage)
 
 	overwrittenErrors = map[error]*Error{
 		storage.ErrPostNotFound:          nil,
@@ -64,6 +63,7 @@ var (
 		storage.ErrMissingCommentFields:  ErrMissingCommentFields,
 		storage.ErrCustomerNotFound:      nil,
 		storage.ErrMissingCustomerFields: ErrMissingCustomerFields,
+		storage.ErrUnrecognizedAuthor:    ErrNonexistentAuthor,
 	}
 )
 
@@ -134,6 +134,7 @@ func (s *Server) writeResponseModelWithError(w http.ResponseWriter, err error) {
 	case storage.ErrMissingPostFields,
 		storage.ErrMissingCommentFields,
 		storage.ErrMissingCustomerFields,
+		storage.ErrUnrecognizedAuthor,
 		ErrUnsupportedPost,
 		ErrUnsupportedComment,
 		ErrUnsupportedCustomer,
