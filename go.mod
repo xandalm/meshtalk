@@ -6,3 +6,5 @@ require (
 	github.com/xandalm/go-router v0.0.0-20240109214914-15022b13025b
 	github.com/xandalm/go-testing v0.0.0-20240325145107-950d80986f72
 )
+
+require github.com/xandalm/go-session v0.0.0-20240321183546-8d65c2940cd5

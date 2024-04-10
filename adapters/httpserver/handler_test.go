@@ -3,15 +3,47 @@ package httpserver
 import (
 	"bytes"
 	"encoding/json"
+	"errors"
 	"io"
 	"meshtalk/domain/entities"
 	"net/http"
 	"net/http/httptest"
 	"slices"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
 )
+
+func getSessionCookie(response *httptest.ResponseRecorder) (*http.Cookie, error) {
+	setCookie := response.Header()["Set-Cookie"]
+	if len(setCookie) != 1 {
+		return nil, errors.New("missing set-cookie")
+	}
+	cookie := map[string]string{}
+	for _, pair := range strings.Split(setCookie[0], "; ") {
+		kv := strings.Split(pair, "=")
+		if len(kv) > 1 {
+			cookie[kv[0]] = kv[1]
+			continue
+		}
+		cookie[kv[0]] = "true"
+	}
+	maxAge, _ := strconv.Atoi(cookie["Max-Age"])
+	httpOnly, _ := strconv.ParseBool(cookie["HttpOnly"])
+	httpCookie := &http.Cookie{
+		Name:     "SESSION_ID",
+		Value:    cookie["SESSION_ID"],
+		Path:     cookie["Path"],
+		HttpOnly: httpOnly,
+		MaxAge:   maxAge,
+	}
+	expires, hasExpires := cookie["Expires"]
+	if hasExpires {
+		httpCookie.Expires, _ = time.Parse(time.RFC1123, expires)
+	}
+	return httpCookie, nil
+}
 
 func TestGETPosts(t *testing.T) {
 	storage := &stubStorage{
@@ -34,9 +66,20 @@ func TestGETPosts(t *testing.T) {
 	}
 	server := NewServer(storage)
 
+	// Login
+	request, _ := http.NewRequest(http.MethodPost, "/login", nil)
+	response := httptest.NewRecorder()
+	server.ServeHTTP(response, request)
+
+	httpCookie, err := getSessionCookie(response)
+	if err != nil {
+		t.Fatalf("cannot login, %v", err)
+	}
+
 	t.Run("returns post with id equal to 1", func(t *testing.T) {
 
 		request := newGetPostRequest("1")
+		request.AddCookie(httpCookie)
 		response := httptest.NewRecorder()
 
 		server.ServeHTTP(response, request)
@@ -52,6 +95,7 @@ func TestGETPosts(t *testing.T) {
 	t.Run("returns post with id equal to 2", func(t *testing.T) {
 
 		request := newGetPostRequest("2")
+		request.AddCookie(httpCookie)
 		response := httptest.NewRecorder()
 
 		server.ServeHTTP(response, request)
@@ -66,6 +110,7 @@ func TestGETPosts(t *testing.T) {
 
 	t.Run("returns 404 on nonexistent post", func(t *testing.T) {
 		request := newGetPostRequest("0")
+		request.AddCookie(httpCookie)
 		response := httptest.NewRecorder()
 
 		server.ServeHTTP(response, request)
@@ -76,6 +121,7 @@ func TestGETPosts(t *testing.T) {
 
 	t.Run("returns all posts", func(t *testing.T) {
 		request, _ := http.NewRequest(http.MethodGet, "/posts", nil)
+		request.AddCookie(httpCookie)
 		response := httptest.NewRecorder()
 
 		server.ServeHTTP(response, request)
@@ -99,6 +145,7 @@ func TestGETPosts(t *testing.T) {
 	t.Run("returns 500 on unexpected error", func(t *testing.T) {
 		server := NewServer(&stubFailingStorage{})
 		request := newGetPostRequest("0")
+		request.AddCookie(httpCookie)
 		response := httptest.NewRecorder()
 
 		server.ServeHTTP(response, request)

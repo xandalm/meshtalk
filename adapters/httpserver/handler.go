@@ -12,6 +12,8 @@ import (
 	"time"
 
 	router "github.com/xandalm/go-router"
+	"github.com/xandalm/go-session"
+	"github.com/xandalm/go-session/filesystem"
 )
 
 type Error struct {
@@ -68,17 +70,30 @@ var (
 )
 
 type Server struct {
-	storage storage.Storage
-	router  *router.Router
-	to      time.Duration
+	storage        storage.Storage
+	router         *router.Router
+	sessionManager *session.Manager
+	to             time.Duration
 }
 
 func NewServer(storage storage.Storage) *Server {
+	sm := session.NewManager(
+		session.NewProvider(
+			filesystem.Storage(),
+			session.SecondsAgeCheckerAdapter,
+		),
+		"SESSION_ID",
+		60,
+	)
+	sm.GC()
 	s := &Server{
-		storage: storage,
-		router:  &router.Router{},
-		to:      time.Minute,
+		storage:        storage,
+		router:         &router.Router{},
+		sessionManager: sm,
+		to:             time.Minute,
 	}
+
+	s.router.PostFunc("/login", s.login)
 
 	s.router.GetFunc("/customers/{id}", s.getCustomerHandler)
 	s.router.PutFunc("/customers/{id}", s.editCustomerHandler)
@@ -171,6 +186,18 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusRequestTimeout)
 	case <-c:
 		return
+	}
+}
+
+func (s *Server) hasPermission(sess session.Session) bool {
+	logged, ok := sess.Get("logged").(bool)
+	return ok && logged
+}
+
+func (s *Server) login(w router.ResponseWriter, r *router.Request) {
+	session := s.sessionManager.StartSession(w, r.Request)
+	if err := session.Set("logged", true); err != nil {
+		w.WriteHeader(http.StatusInternalServerError)
 	}
 }
 
@@ -271,7 +298,13 @@ func (s *Server) getPostHandler(w router.ResponseWriter, r *router.Request) {
 	s.writeResponseModelWithoutError(w, found)
 }
 
-func (s *Server) getPostsHandler(w router.ResponseWriter, _ *router.Request) {
+func (s *Server) getPostsHandler(w router.ResponseWriter, r *router.Request) {
+	session := s.sessionManager.StartSession(w, r.Request)
+	if !s.hasPermission(session) {
+		w.WriteHeader(http.StatusUnauthorized)
+		return
+	}
+
 	posts, err := s.storage.GetPosts()
 	if err != nil {
 		s.writeResponseModelWithError(w, err)
