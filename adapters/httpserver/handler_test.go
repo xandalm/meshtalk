@@ -94,7 +94,16 @@ func TestGETPosts(t *testing.T) {
 		for _, p := range storage.posts {
 			assertContains(t, got, p)
 		}
+	})
 
+	t.Run("returns 500 on unexpected error", func(t *testing.T) {
+		server := NewServer(&stubFailingStorage{})
+		request := newGetPostRequest("0")
+		response := httptest.NewRecorder()
+
+		server.ServeHTTP(response, request)
+
+		assertStatus(t, response, http.StatusInternalServerError)
 	})
 }
 
@@ -145,45 +154,46 @@ func TestPOSTPosts(t *testing.T) {
 			)
 		}
 	})
+	t.Run("returns 400", func(t *testing.T) {
+		t.Run("unsupported error", func(t *testing.T) {
+			request := newCreatePostRequest(`data`)
+			response := httptest.NewRecorder()
 
-	t.Run("returns 400 and unsupported error", func(t *testing.T) {
-		request := newCreatePostRequest(`data`)
-		response := httptest.NewRecorder()
+			server.ServeHTTP(response, request)
 
-		server.ServeHTTP(response, request)
+			assertStatus(t, response, http.StatusBadRequest)
 
-		assertStatus(t, response, http.StatusBadRequest)
+			got := getErrorFromResponseModel(t, response.Body)
+			want := ErrUnsupportedPost
 
-		got := getErrorFromResponseModel(t, response.Body)
-		want := ErrUnsupportedPost
+			assertGotError(t, got, want)
+		})
+		t.Run("missing fields error", func(t *testing.T) {
+			request := newCreatePostRequest(`{}`)
+			response := httptest.NewRecorder()
 
-		assertGotError(t, got, want)
-	})
-	t.Run("returns 400 and missing fields error", func(t *testing.T) {
-		request := newCreatePostRequest(`{}`)
-		response := httptest.NewRecorder()
+			server.ServeHTTP(response, request)
 
-		server.ServeHTTP(response, request)
+			assertStatus(t, response, http.StatusBadRequest)
 
-		assertStatus(t, response, http.StatusBadRequest)
+			got := getErrorFromResponseModel(t, response.Body)
+			want := ErrMissingPostFields
 
-		got := getErrorFromResponseModel(t, response.Body)
-		want := ErrMissingPostFields
+			assertGotError(t, got, want)
+		})
+		t.Run("nonexistent author", func(t *testing.T) {
+			request := newCreatePostRequest(`{"title": "Post X", "content": "Post Content", "author": "2"}`)
+			response := httptest.NewRecorder()
 
-		assertGotError(t, got, want)
-	})
-	t.Run("returns 400 because nonexistent author", func(t *testing.T) {
-		request := newCreatePostRequest(`{"title": "Post X", "content": "Post Content", "author": "2"}`)
-		response := httptest.NewRecorder()
+			server.ServeHTTP(response, request)
 
-		server.ServeHTTP(response, request)
+			assertStatus(t, response, http.StatusBadRequest)
 
-		assertStatus(t, response, http.StatusBadRequest)
+			got := getErrorFromResponseModel(t, response.Body)
+			want := ErrNonexistentAuthor
 
-		got := getErrorFromResponseModel(t, response.Body)
-		want := ErrNonexistentAuthor
-
-		assertGotError(t, got, want)
+			assertGotError(t, got, want)
+		})
 	})
 	t.Run("returns 500 on unexpected error", func(t *testing.T) {
 		storage := &stubFailingStorage{}
@@ -453,6 +463,16 @@ func TestGETComments(t *testing.T) {
 			}
 		}
 	})
+
+	t.Run("returns 500 on unexpected error", func(t *testing.T) {
+		server := NewServer(&stubFailingStorage{})
+		request := newGetCommentsRequest("1", "1")
+		response := httptest.NewRecorder()
+
+		server.ServeHTTP(response, request)
+
+		assertStatus(t, response, http.StatusInternalServerError)
+	})
 }
 
 func TestPOSTComments(t *testing.T) {
@@ -577,6 +597,16 @@ func TestPOSTComments(t *testing.T) {
 			assertGotError(t, got, want)
 		})
 	})
+
+	t.Run("returns 500 on unexpected error", func(t *testing.T) {
+		server := NewServer(&stubFailingStorage{})
+		request := newCreateCommentRequest("1", `{"content": "Comment Content", "author": "1"}`)
+		response := httptest.NewRecorder()
+
+		server.ServeHTTP(response, request)
+
+		assertStatus(t, response, http.StatusInternalServerError)
+	})
 }
 
 func TestPUTComments(t *testing.T) {
@@ -655,7 +685,7 @@ func TestPUTComments(t *testing.T) {
 		got := getErrorFromResponseModel(t, response.Body)
 		assertGotError(t, got, ErrNothingToUpdate)
 	})
-	t.Run("returns 500", func(t *testing.T) {
+	t.Run("returns 500 on unexpected error", func(t *testing.T) {
 		storage := &stubFailingStorage{}
 		server := NewServer(storage)
 		request := newEditCommentRequest("1", "2", `{"Content": "Edited Content"}`)
@@ -722,7 +752,7 @@ func TestDELETEComments(t *testing.T) {
 
 	})
 
-	t.Run("returns 500", func(t *testing.T) {
+	t.Run("returns 500 on unexpected error", func(t *testing.T) {
 		storage := &stubFailingStorage{}
 		server := NewServer(storage)
 		request := newDeleteCommentRequest("1", "1")
@@ -768,32 +798,34 @@ func TestPOSTCustomers(t *testing.T) {
 		}
 	})
 
-	t.Run("returns 400 and unsupported error", func(t *testing.T) {
-		request := newCreateCustomerRequest(`data`)
-		response := httptest.NewRecorder()
+	t.Run("returns 400", func(t *testing.T) {
+		t.Run("unsupported error", func(t *testing.T) {
+			request := newCreateCustomerRequest(`data`)
+			response := httptest.NewRecorder()
 
-		server.ServeHTTP(response, request)
+			server.ServeHTTP(response, request)
 
-		assertStatus(t, response, http.StatusBadRequest)
+			assertStatus(t, response, http.StatusBadRequest)
 
-		got := getErrorFromResponseModel(t, response.Body)
-		want := ErrUnsupportedCustomer
+			got := getErrorFromResponseModel(t, response.Body)
+			want := ErrUnsupportedCustomer
 
-		assertGotError(t, got, want)
-	})
+			assertGotError(t, got, want)
+		})
 
-	t.Run("returns 400 and missing fields error", func(t *testing.T) {
-		request := newCreateCustomerRequest(`{}`)
-		response := httptest.NewRecorder()
+		t.Run("missing fields error", func(t *testing.T) {
+			request := newCreateCustomerRequest(`{}`)
+			response := httptest.NewRecorder()
 
-		server.ServeHTTP(response, request)
+			server.ServeHTTP(response, request)
 
-		assertStatus(t, response, http.StatusBadRequest)
+			assertStatus(t, response, http.StatusBadRequest)
 
-		got := getErrorFromResponseModel(t, response.Body)
-		want := ErrMissingCustomerFields
+			got := getErrorFromResponseModel(t, response.Body)
+			want := ErrMissingCustomerFields
 
-		assertGotError(t, got, want)
+			assertGotError(t, got, want)
+		})
 	})
 
 	t.Run("returns 500 on unexpected error", func(t *testing.T) {
@@ -844,7 +876,7 @@ func TestGETCustomers(t *testing.T) {
 
 	})
 
-	t.Run("returns 500", func(t *testing.T) {
+	t.Run("returns 500 on unexpected error", func(t *testing.T) {
 		server := NewServer(&stubFailingStorage{})
 
 		request := newGetCustomerRequest("1")
@@ -906,7 +938,7 @@ func TestPUTCustomers(t *testing.T) {
 		assertGotError(t, got, ErrNothingToUpdate)
 	})
 
-	t.Run("returns 500", func(t *testing.T) {
+	t.Run("returns 500 on unexpected error", func(t *testing.T) {
 		server := NewServer(&stubFailingStorage{})
 
 		request := newEditCustomerRequest("1", `{"name": "James"}`)
@@ -948,7 +980,7 @@ func TestDELETECustomers(t *testing.T) {
 		}
 	})
 
-	t.Run("returns 500", func(t *testing.T) {
+	t.Run("returns 500 on unexpected error", func(t *testing.T) {
 		storage := &stubFailingStorage{}
 		server := NewServer(storage)
 
