@@ -11,7 +11,7 @@ var (
 	ErrCommentNotFound       = errors.New("storage: comment not found")
 	ErrMissingCommentFields  = errors.New("storage: content and author are required for the comment")
 	ErrCustomerNotFound      = errors.New("storage: customer not found")
-	ErrMissingCustomerFields = errors.New("storage: name is required for the customer")
+	ErrMissingCustomerFields = errors.New("storage: tag, name and password is required for the customer")
 	ErrUnrecognizedAuthor    = errors.New("storage: invalid author, must be a customer id")
 )
 

@@ -188,7 +188,7 @@ func (s *stubStorage) DeleteComment(post, id string) error {
 }
 
 func (s *stubStorage) CreateCustomer(customer *entities.Customer) error {
-	if customer.Name == "" {
+	if customer.Tag == "" || customer.Name == "" || customer.Password == "" {
 		return storage.ErrMissingCustomerFields
 	}
 	customer.Id = strconv.Itoa(len(s.customers) + 1)
@@ -408,7 +408,7 @@ func assertGotError(t testing.TB, got Error, want *Error) {
 	t.Helper()
 
 	if !isEqual(got, *want) {
-		t.Errorf("got error %q, but want %q", got, *want)
+		t.Fatalf("got error %q, but want %q", got, *want)
 	}
 }
 

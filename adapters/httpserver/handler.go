@@ -13,7 +13,7 @@ import (
 
 	router "github.com/xandalm/go-router"
 	"github.com/xandalm/go-session"
-	"github.com/xandalm/go-session/filesystem"
+	"github.com/xandalm/go-session/memory"
 )
 
 type Error struct {
@@ -85,7 +85,7 @@ type Server struct {
 func NewServer(storage storage.Storage) *Server {
 	sm := session.NewManager(
 		session.NewProvider(
-			filesystem.Storage(),
+			memory.Storage(),
 			session.SecondsAgeCheckerAdapter,
 		),
 		sessionCookieName,

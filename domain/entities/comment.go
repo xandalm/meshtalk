@@ -11,16 +11,6 @@ type Comment struct {
 	DeletedAt string `json:"deletedAt"`
 }
 
-// Create a new comment representation.
-func NewComment(id, post, content, author string) *Comment {
-	return &Comment{
-		Id:      id,
-		Post:    post,
-		Content: content,
-		Author:  author,
-	}
-}
-
 // It's like a helper to expose editable fields of the Comment.
 // The editable fields are pointers because this way is possible
 // to keep them optional to be edited.

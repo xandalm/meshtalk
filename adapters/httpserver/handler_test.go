@@ -260,11 +260,20 @@ func TestPOSTPosts(t *testing.T) {
 	})
 }
 
+func newPost(id, title, content, author string) *entities.Post {
+	return &entities.Post{
+		Id:      id,
+		Title:   title,
+		Content: content,
+		Author:  author,
+	}
+}
+
 func TestPUTPosts(t *testing.T) {
 	storage := &stubStorage{
 		posts: map[string]entities.Post{
-			"1": *entities.NewPost("1", "Post 1", "Post Content", "1"),
-			"2": *entities.NewPost("2", "Post 2", "Post Content", "2"),
+			"1": *newPost("1", "Post 1", "Post Content", "1"),
+			"2": *newPost("2", "Post 2", "Post Content", "2"),
 		},
 	}
 	server := NewServer(storage)
@@ -309,7 +318,7 @@ func TestPUTPosts(t *testing.T) {
 	t.Run("returns 500 on unexpected error", func(t *testing.T) {
 		storage := &stubFailingStorage{
 			posts: map[string]entities.Post{
-				"1": *entities.NewPost("1", "Post 1", "Post Content", "1"),
+				"1": *newPost("1", "Post 1", "Post Content", "1"),
 			},
 		}
 		server := NewServer(storage)
@@ -327,7 +336,7 @@ func TestDELETEPosts(t *testing.T) {
 	t.Run("returns 200 on post deleted", func(t *testing.T) {
 		storage := &stubStorage{
 			posts: map[string]entities.Post{
-				"1": *entities.NewPost("1", "Post 1", "Post Content", "1"),
+				"1": *newPost("1", "Post 1", "Post Content", "1"),
 			},
 		}
 		server := NewServer(storage)
@@ -837,7 +846,7 @@ func TestPOSTCustomers(t *testing.T) {
 	sessionCookie := login(t, server)
 
 	t.Run("returns 201 and customer", func(t *testing.T) {
-		request := newCreateCustomerRequest(sessionCookie, `{"name": "Marie"}`)
+		request := newCreateCustomerRequest(sessionCookie, `{"tag": "marie", "name": "Marie", "password": "123456"}`)
 		response := httptest.NewRecorder()
 
 		server.ServeHTTP(response, request)
@@ -850,17 +859,20 @@ func TestPOSTCustomers(t *testing.T) {
 
 		want := entities.Customer{
 			Id:   "1",
+			Tag:  "marie",
 			Name: "Marie",
 		}
 
 		got := getCustomerFromResponseModel(t, response.Body)
 
-		if got.Id != want.Id || got.Name != want.Name {
+		if got.Id != want.Id || got.Tag != want.Tag || got.Name != want.Name {
 			t.Errorf(
-				`did not get expected comment, got {Id="%s", Name="%s"} want {Id="%s", Name="%s"}`,
+				`did not get expected comment, got {Id="%s", Tag="%s", Name="%s"} want {Id="%s", Tag="%s", Name="%s"}`,
 				got.Id,
+				got.Tag,
 				got.Name,
 				want.Id,
+				want.Tag,
 				want.Name,
 			)
 		}
@@ -882,17 +894,30 @@ func TestPOSTCustomers(t *testing.T) {
 		})
 
 		t.Run("missing fields error", func(t *testing.T) {
-			request := newCreateCustomerRequest(sessionCookie, `{}`)
-			response := httptest.NewRecorder()
 
-			server.ServeHTTP(response, request)
+			cases := []string{
+				`{}`,
+				`{"tag": "james"}`,
+				`{"name": "James"}`,
+				`{"password": "123456"}`,
+				`{"tag": "james", "name": "James"}`,
+				`{"name": "James", "passaword": "123456"}`,
+				`{"tag": "james", "password": "123456"}`,
+			}
 
-			assertStatus(t, response, http.StatusBadRequest)
+			for _, raw := range cases {
+				request := newCreateCustomerRequest(sessionCookie, raw)
+				response := httptest.NewRecorder()
 
-			got := getErrorFromResponseModel(t, response.Body)
-			want := ErrMissingCustomerFields
+				server.ServeHTTP(response, request)
 
-			assertGotError(t, got, want)
+				assertStatus(t, response, http.StatusBadRequest)
+
+				got := getErrorFromResponseModel(t, response.Body)
+				want := ErrMissingCustomerFields
+
+				assertGotError(t, got, want)
+			}
 		})
 	})
 
