@@ -35,7 +35,7 @@ type Storage interface {
 	// ErrCustomerNotFound,
 	// ErrMissingCustomerFields.
 	// Any other error is a uncategorized for storage interface.
-	EditCustomer(edit entities.CustomerInEditting) (*entities.Customer, error)
+	EditCustomer(id string, edit entities.CustomerInEditting) (*entities.Customer, error)
 
 	// Delete customer data.
 	//

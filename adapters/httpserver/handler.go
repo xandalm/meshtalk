@@ -101,22 +101,22 @@ func NewServer(storage storage.Storage) *Server {
 
 	s.router.PostFunc("/login", s.login)
 
-	s.router.GetFunc("/customers/{id}", s.getCustomerHandler)
-	s.router.PutFunc("/customers/{id}", s.editCustomerHandler)
-	s.router.DeleteFunc("/customers/{id}", s.deleteCustomerHandler)
+	s.router.GetFunc("/customers/{customer}", s.getCustomerHandler)
+	s.router.PutFunc("/customers/{customer}", s.editCustomerHandler)
+	s.router.DeleteFunc("/customers/{customer}", s.deleteCustomerHandler)
 	s.router.PostFunc("/customers", s.createCustomerHandler)
 
-	s.router.GetFunc("/posts/{id}", s.getPostHandler)
-	s.router.PutFunc("/posts/{id}", s.editPostHandler)
-	s.router.DeleteFunc("/posts/{id}", s.deletePostHandler)
+	s.router.GetFunc("/posts/{post}", s.getPostHandler)
+	s.router.PutFunc("/posts/{post}", s.editPostHandler)
+	s.router.DeleteFunc("/posts/{post}", s.deletePostHandler)
 	s.router.GetFunc("/posts", s.getPostsHandler)
 	s.router.PostFunc("/posts", s.createPostHandler)
 
-	s.router.GetFunc("/posts/{pid}/comments/{cid}", s.getPostCommentHandler)
-	s.router.PutFunc("/posts/{pid}/comments/{cid}", s.editPostCommentHandler)
-	s.router.DeleteFunc("/posts/{pid}/comments/{cid}", s.deleteCommentHandler)
-	s.router.GetFunc("/posts/{pid}/comments", s.getPostCommentsHandler)
-	s.router.PostFunc("/posts/{pid}/comments", s.createPostCommentHandler)
+	s.router.GetFunc("/posts/{post}/comments/{comment}", s.getPostCommentHandler)
+	s.router.PutFunc("/posts/{post}/comments/{comment}", s.editPostCommentHandler)
+	s.router.DeleteFunc("/posts/{post}/comments/{comment}", s.deleteCommentHandler)
+	s.router.GetFunc("/posts/{post}/comments", s.getPostCommentsHandler)
+	s.router.PostFunc("/posts/{post}/comments", s.createPostCommentHandler)
 
 	s.router.GetFunc("/comments", s.getCommentsHandler)
 
@@ -237,9 +237,9 @@ func (s *Server) getCustomerHandler(w router.ResponseWriter, r *router.Request) 
 		return
 	}
 
-	customerId := r.Params()["id"]
+	customer := r.Params()["customer"]
 
-	found, err := s.storage.GetCustomer(customerId)
+	found, err := s.storage.GetCustomer(customer)
 	if err != nil {
 		s.writeResponseModelWithError(w, err)
 	}
@@ -264,14 +264,15 @@ func (s *Server) editCustomerHandler(w router.ResponseWriter, r *router.Request)
 		s.writeResponseModelWithError(w, ErrUnsupportedCustomer)
 		return
 	}
-	edit.Id = params["id"]
 
 	if edit.Name == nil && edit.Password == nil {
 		s.writeResponseModelWithError(w, ErrNothingToUpdate)
 		return
 	}
 
-	if _, err := s.storage.EditCustomer(edit); err != nil {
+	customer := params["customer"]
+
+	if _, err := s.storage.EditCustomer(customer, edit); err != nil {
 		s.writeResponseModelWithError(w, err)
 	}
 
@@ -285,9 +286,9 @@ func (s *Server) deleteCustomerHandler(w router.ResponseWriter, r *router.Reques
 		return
 	}
 
-	customerId := r.Params()["id"]
+	customer := r.Params()["customer"]
 
-	if err := s.storage.DeleteCustomer(customerId); err != nil {
+	if err := s.storage.DeleteCustomer(customer); err != nil {
 		s.writeResponseModelWithError(w, err)
 	}
 	w.WriteHeader(http.StatusNoContent)
@@ -326,9 +327,9 @@ func (s *Server) getPostHandler(w router.ResponseWriter, r *router.Request) {
 		return
 	}
 
-	postId := r.Params()["id"]
+	post := r.Params()["post"]
 
-	found, err := s.storage.GetPost(postId)
+	found, err := s.storage.GetPost(post)
 	if err != nil {
 		s.writeResponseModelWithError(w, err)
 		return
@@ -370,7 +371,7 @@ func (s *Server) editPostHandler(w router.ResponseWriter, r *router.Request) {
 		s.writeResponseModelWithError(w, ErrUnsupportedPost)
 		return
 	}
-	edit.Id = params["id"]
+	edit.Id = params["post"]
 
 	if edit.Title == nil && edit.Content == nil {
 		s.writeResponseModelWithError(w, ErrNothingToUpdate)
@@ -392,8 +393,8 @@ func (s *Server) deletePostHandler(w router.ResponseWriter, r *router.Request) {
 		return
 	}
 
-	postId := r.Params()["id"]
-	if err := s.storage.DeletePost(postId); err != nil {
+	post := r.Params()["post"]
+	if err := s.storage.DeletePost(post); err != nil {
 		s.writeResponseModelWithError(w, err)
 		return
 	}
@@ -447,10 +448,10 @@ func (s *Server) getPostCommentHandler(w router.ResponseWriter, r *router.Reques
 
 	params := r.Params()
 
-	pid := params["pid"]
-	cid := params["cid"]
+	post := params["post"]
+	comment := params["comment"]
 
-	found, err := s.storage.GetComment(pid, cid)
+	found, err := s.storage.GetComment(post, comment)
 	if err != nil {
 		s.writeResponseModelWithError(w, err)
 		return
@@ -472,9 +473,9 @@ func (s *Server) getPostCommentsHandler(w router.ResponseWriter, r *router.Reque
 
 	params := r.Params()
 
-	pid := params["pid"]
+	post := params["post"]
 
-	comments, err := s.storage.GetComments(pid)
+	comments, err := s.storage.GetComments(post)
 	if err != nil {
 		s.writeResponseModelWithError(w, err)
 		return
@@ -490,7 +491,7 @@ func (s *Server) createPostCommentHandler(w router.ResponseWriter, r *router.Req
 		return
 	}
 
-	pid := r.Params()["pid"]
+	post := r.Params()["post"]
 
 	var comment entities.Comment
 	err := r.ParseBodyInto(&comment)
@@ -500,7 +501,7 @@ func (s *Server) createPostCommentHandler(w router.ResponseWriter, r *router.Req
 		return
 	}
 
-	comment.Post = pid
+	comment.Post = post
 
 	if err := s.storage.CreateComment(&comment); err != nil {
 		s.writeResponseModelWithError(w, err)
@@ -526,8 +527,8 @@ func (s *Server) editPostCommentHandler(w router.ResponseWriter, r *router.Reque
 		return
 	}
 
-	edit.Post = params["pid"]
-	edit.Id = params["cid"]
+	edit.Post = params["post"]
+	edit.Id = params["comment"]
 
 	if edit.Content == nil {
 		s.writeResponseModelWithError(w, ErrNothingToUpdate)
@@ -551,7 +552,7 @@ func (s *Server) deleteCommentHandler(w router.ResponseWriter, r *router.Request
 
 	params := r.Params()
 
-	if err := s.storage.DeleteComment(params["pid"], params["cid"]); err != nil {
+	if err := s.storage.DeleteComment(params["post"], params["comment"]); err != nil {
 		s.writeResponseModelWithError(w, err)
 		return
 	}

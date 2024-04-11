@@ -204,22 +204,24 @@ func (s *stubStorage) GetCustomer(id string) (*entities.Customer, error) {
 	}
 	return &entities.Customer{
 		Id:        found.Id,
+		Tag:       found.Tag,
 		Name:      found.Name,
+		Password:  found.Password,
 		CreatedAt: found.CreatedAt,
 		UpdatedAt: found.UpdatedAt,
 		DeletedAt: found.DeletedAt,
 	}, nil
 }
 
-func (s *stubStorage) EditCustomer(edit entities.CustomerInEditting) (*entities.Customer, error) {
-	if _, ok := s.customers[edit.Id]; !ok {
+func (s *stubStorage) EditCustomer(id string, edit entities.CustomerInEditting) (*entities.Customer, error) {
+	if _, ok := s.customers[id]; !ok {
 		return nil, storage.ErrCustomerNotFound
 	}
 	if (edit.Name == nil || *edit.Name == "") && (edit.Password == nil || *edit.Password == "") {
 		return nil, storage.ErrMissingCustomerFields
 	}
 	builder := strings.Builder{}
-	builder.WriteString(fmt.Sprintf("Id=%q", edit.Id))
+	builder.WriteString(fmt.Sprintf("Id=%q", id))
 	if edit.Name != nil {
 		builder.WriteString(", ")
 		builder.WriteString(fmt.Sprintf("Name=%q", *edit.Name))
@@ -291,7 +293,7 @@ func (s *stubFailingStorage) GetCustomer(id string) (*entities.Customer, error) 
 	return nil, errFoo
 }
 
-func (s *stubFailingStorage) EditCustomer(edit entities.CustomerInEditting) (*entities.Customer, error) {
+func (s *stubFailingStorage) EditCustomer(id string, edit entities.CustomerInEditting) (*entities.Customer, error) {
 	return nil, errFoo
 }
 
@@ -312,7 +314,7 @@ type mockStorage struct {
 	DeleteCommentFunc  func(post, id string) error
 	CreateCustomerFunc func(customer *entities.Customer) error
 	GetCustomerFunc    func(id string) (*entities.Customer, error)
-	EditCustomerFunc   func(edit entities.CustomerInEditting) (*entities.Customer, error)
+	EditCustomerFunc   func(id string, edit entities.CustomerInEditting) (*entities.Customer, error)
 	DeleteCustomerFunc func(id string) error
 }
 
@@ -364,8 +366,8 @@ func (s *mockStorage) GetCustomer(id string) (*entities.Customer, error) {
 	return s.GetCustomerFunc(id)
 }
 
-func (s *mockStorage) EditCustomer(edit entities.CustomerInEditting) (*entities.Customer, error) {
-	return s.EditCustomerFunc(edit)
+func (s *mockStorage) EditCustomer(id string, edit entities.CustomerInEditting) (*entities.Customer, error) {
+	return s.EditCustomerFunc(id, edit)
 }
 
 func (s *mockStorage) DeleteCustomer(id string) error {
@@ -396,7 +398,7 @@ func assertGotComment(t testing.TB, got, want entities.Comment) {
 	t.Helper()
 
 	if !isEqual(got, want) {
-		t.Errorf("wrong post received, got %v but want %v", got, want)
+		t.Errorf("wrong comment received, got %v but want %v", got, want)
 	}
 }
 
@@ -404,7 +406,7 @@ func assertGotCustomer(t testing.TB, got, want entities.Customer) {
 	t.Helper()
 
 	if !isEqual(got, want) {
-		t.Errorf("wrong post received, got %v but want %v", got, want)
+		t.Errorf("wrong customer received, got %v but want %v", got, want)
 	}
 }
 

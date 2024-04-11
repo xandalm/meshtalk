@@ -938,7 +938,9 @@ func TestGETCustomers(t *testing.T) {
 		customers: map[string]entities.Customer{
 			"1": {
 				Id:        "1",
+				Tag:       "john",
 				Name:      "John",
+				Password:  "123456",
 				CreatedAt: newDate(2024, time.April, 4, 11, 55, 0, 0),
 			},
 		},

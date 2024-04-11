@@ -15,7 +15,6 @@ type Customer struct {
 // The editable fields are pointers because this way is possible
 // to keep them optional to be edited.
 type CustomerInEditting struct {
-	Id       string
 	Name     *string
 	Password *string
 }
