@@ -266,7 +266,7 @@ func (s *Server) editCustomerHandler(w router.ResponseWriter, r *router.Request)
 	}
 	edit.Id = params["id"]
 
-	if edit.Name == nil {
+	if edit.Name == nil && edit.Password == nil {
 		s.writeResponseModelWithError(w, ErrNothingToUpdate)
 		return
 	}

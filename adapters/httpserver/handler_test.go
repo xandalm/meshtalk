@@ -988,7 +988,9 @@ func TestPUTCustomers(t *testing.T) {
 		customers: map[string]entities.Customer{
 			"1": {
 				Id:        "1",
+				Tag:       "john",
 				Name:      "John",
+				Password:  "123456",
 				CreatedAt: newDate(2024, time.April, 4, 11, 55, 0, 0),
 			},
 		},
@@ -998,18 +1000,29 @@ func TestPUTCustomers(t *testing.T) {
 	sessionCookie := login(t, server)
 
 	t.Run("returns 204", func(t *testing.T) {
-		request := newEditCustomerRequest(sessionCookie, "1", `{"name": "Jhonny"}`)
-		response := httptest.NewRecorder()
+		cases := []struct {
+			raw  string
+			want string
+		}{
+			{`{"name": "Jhonny"}`, `Id="1", Name="Jhonny"`},
+			{`{"password": "654321"}`, `Id="1", Password="654321"`},
+			{`{"name": "Jhon", "password": "123456"}`, `Id="1", Name="Jhon", Password="123456"`},
+		}
 
-		server.ServeHTTP(response, request)
+		for _, c := range cases {
+			request := newEditCustomerRequest(sessionCookie, "1", c.raw)
+			response := httptest.NewRecorder()
 
-		assertStatus(t, response, http.StatusNoContent)
+			server.ServeHTTP(response, request)
 
-		if !slices.Contains(
-			storage.customerEditCalls,
-			`Id="1", Name="Jhonny"`,
-		) {
-			t.Errorf("didn't update customer")
+			assertStatus(t, response, http.StatusNoContent)
+
+			if !slices.Contains(
+				storage.customerEditCalls,
+				c.want,
+			) {
+				t.Errorf("didn't update customer")
+			}
 		}
 	})
 

@@ -215,7 +215,7 @@ func (s *stubStorage) EditCustomer(edit entities.CustomerInEditting) (*entities.
 	if _, ok := s.customers[edit.Id]; !ok {
 		return nil, storage.ErrCustomerNotFound
 	}
-	if edit.Name == nil || *edit.Name == "" {
+	if (edit.Name == nil || *edit.Name == "") && (edit.Password == nil || *edit.Password == "") {
 		return nil, storage.ErrMissingCustomerFields
 	}
 	builder := strings.Builder{}
@@ -223,6 +223,10 @@ func (s *stubStorage) EditCustomer(edit entities.CustomerInEditting) (*entities.
 	if edit.Name != nil {
 		builder.WriteString(", ")
 		builder.WriteString(fmt.Sprintf("Name=%q", *edit.Name))
+	}
+	if edit.Password != nil {
+		builder.WriteString(", ")
+		builder.WriteString(fmt.Sprintf("Password=%q", *edit.Password))
 	}
 	s.customerEditCalls = append(s.customerEditCalls, builder.String())
 	return nil, nil
