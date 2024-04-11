@@ -69,6 +69,12 @@ var (
 	}
 )
 
+const sessionCookieName = "SESSION_ID"
+
+func SessionCookieName() string {
+	return sessionCookieName
+}
+
 type Server struct {
 	storage        storage.Storage
 	router         *router.Router
@@ -82,8 +88,8 @@ func NewServer(storage storage.Storage) *Server {
 			filesystem.Storage(),
 			session.SecondsAgeCheckerAdapter,
 		),
-		"SESSION_ID",
-		60,
+		sessionCookieName,
+		int64(24*time.Hour/time.Second),
 	)
 	sm.GC()
 	s := &Server{
@@ -202,6 +208,12 @@ func (s *Server) login(w router.ResponseWriter, r *router.Request) {
 }
 
 func (s *Server) createCustomerHandler(w router.ResponseWriter, r *router.Request) {
+	session := s.sessionManager.StartSession(w, r.Request)
+	if !s.hasPermission(session) {
+		w.WriteHeader(http.StatusUnauthorized)
+		return
+	}
+
 	var customer entities.Customer
 	if err := r.ParseBodyInto(&customer); err != nil {
 		s.writeResponseModelWithError(w, ErrUnsupportedCustomer)
@@ -219,6 +231,12 @@ func (s *Server) createCustomerHandler(w router.ResponseWriter, r *router.Reques
 }
 
 func (s *Server) getCustomerHandler(w router.ResponseWriter, r *router.Request) {
+	session := s.sessionManager.StartSession(w, r.Request)
+	if !s.hasPermission(session) {
+		w.WriteHeader(http.StatusUnauthorized)
+		return
+	}
+
 	customerId := r.Params()["id"]
 
 	found, err := s.storage.GetCustomer(customerId)
@@ -233,6 +251,12 @@ func (s *Server) getCustomerHandler(w router.ResponseWriter, r *router.Request) 
 }
 
 func (s *Server) editCustomerHandler(w router.ResponseWriter, r *router.Request) {
+	session := s.sessionManager.StartSession(w, r.Request)
+	if !s.hasPermission(session) {
+		w.WriteHeader(http.StatusUnauthorized)
+		return
+	}
+
 	params := r.Params()
 
 	var edit entities.CustomerInEditting
@@ -255,6 +279,12 @@ func (s *Server) editCustomerHandler(w router.ResponseWriter, r *router.Request)
 }
 
 func (s *Server) deleteCustomerHandler(w router.ResponseWriter, r *router.Request) {
+	session := s.sessionManager.StartSession(w, r.Request)
+	if !s.hasPermission(session) {
+		w.WriteHeader(http.StatusUnauthorized)
+		return
+	}
+
 	customerId := r.Params()["id"]
 
 	if err := s.storage.DeleteCustomer(customerId); err != nil {
@@ -264,6 +294,12 @@ func (s *Server) deleteCustomerHandler(w router.ResponseWriter, r *router.Reques
 }
 
 func (s *Server) createPostHandler(w router.ResponseWriter, r *router.Request) {
+	session := s.sessionManager.StartSession(w, r.Request)
+	if !s.hasPermission(session) {
+		w.WriteHeader(http.StatusUnauthorized)
+		return
+	}
+
 	var post entities.Post
 	err := r.ParseBodyInto(&post)
 	if err != nil {
@@ -284,6 +320,12 @@ func (s *Server) createPostHandler(w router.ResponseWriter, r *router.Request) {
 }
 
 func (s *Server) getPostHandler(w router.ResponseWriter, r *router.Request) {
+	session := s.sessionManager.StartSession(w, r.Request)
+	if !s.hasPermission(session) {
+		w.WriteHeader(http.StatusUnauthorized)
+		return
+	}
+
 	postId := r.Params()["id"]
 
 	found, err := s.storage.GetPost(postId)
@@ -314,6 +356,12 @@ func (s *Server) getPostsHandler(w router.ResponseWriter, r *router.Request) {
 }
 
 func (s *Server) editPostHandler(w router.ResponseWriter, r *router.Request) {
+	session := s.sessionManager.StartSession(w, r.Request)
+	if !s.hasPermission(session) {
+		w.WriteHeader(http.StatusUnauthorized)
+		return
+	}
+
 	params := r.Params()
 
 	var edit entities.PostInEditting
@@ -338,6 +386,12 @@ func (s *Server) editPostHandler(w router.ResponseWriter, r *router.Request) {
 }
 
 func (s *Server) deletePostHandler(w router.ResponseWriter, r *router.Request) {
+	session := s.sessionManager.StartSession(w, r.Request)
+	if !s.hasPermission(session) {
+		w.WriteHeader(http.StatusUnauthorized)
+		return
+	}
+
 	postId := r.Params()["id"]
 	if err := s.storage.DeletePost(postId); err != nil {
 		s.writeResponseModelWithError(w, err)
@@ -347,6 +401,11 @@ func (s *Server) deletePostHandler(w router.ResponseWriter, r *router.Request) {
 }
 
 func (s *Server) getCommentsHandler(w router.ResponseWriter, r *router.Request) {
+	session := s.sessionManager.StartSession(w, r.Request)
+	if !s.hasPermission(session) {
+		w.WriteHeader(http.StatusUnauthorized)
+		return
+	}
 
 	query := r.URL.Query()
 
@@ -380,6 +439,12 @@ func (s *Server) getCommentsHandler(w router.ResponseWriter, r *router.Request) 
 }
 
 func (s *Server) getPostCommentHandler(w router.ResponseWriter, r *router.Request) {
+	session := s.sessionManager.StartSession(w, r.Request)
+	if !s.hasPermission(session) {
+		w.WriteHeader(http.StatusUnauthorized)
+		return
+	}
+
 	params := r.Params()
 
 	pid := params["pid"]
@@ -399,6 +464,12 @@ func (s *Server) getPostCommentHandler(w router.ResponseWriter, r *router.Reques
 }
 
 func (s *Server) getPostCommentsHandler(w router.ResponseWriter, r *router.Request) {
+	session := s.sessionManager.StartSession(w, r.Request)
+	if !s.hasPermission(session) {
+		w.WriteHeader(http.StatusUnauthorized)
+		return
+	}
+
 	params := r.Params()
 
 	pid := params["pid"]
@@ -413,6 +484,12 @@ func (s *Server) getPostCommentsHandler(w router.ResponseWriter, r *router.Reque
 }
 
 func (s *Server) createPostCommentHandler(w router.ResponseWriter, r *router.Request) {
+	session := s.sessionManager.StartSession(w, r.Request)
+	if !s.hasPermission(session) {
+		w.WriteHeader(http.StatusUnauthorized)
+		return
+	}
+
 	pid := r.Params()["pid"]
 
 	var comment entities.Comment
@@ -435,6 +512,12 @@ func (s *Server) createPostCommentHandler(w router.ResponseWriter, r *router.Req
 }
 
 func (s *Server) editPostCommentHandler(w router.ResponseWriter, r *router.Request) {
+	session := s.sessionManager.StartSession(w, r.Request)
+	if !s.hasPermission(session) {
+		w.WriteHeader(http.StatusUnauthorized)
+		return
+	}
+
 	params := r.Params()
 
 	var edit entities.CommentInEditting
@@ -460,6 +543,12 @@ func (s *Server) editPostCommentHandler(w router.ResponseWriter, r *router.Reque
 }
 
 func (s *Server) deleteCommentHandler(w router.ResponseWriter, r *router.Request) {
+	session := s.sessionManager.StartSession(w, r.Request)
+	if !s.hasPermission(session) {
+		w.WriteHeader(http.StatusUnauthorized)
+		return
+	}
+
 	params := r.Params()
 
 	if err := s.storage.DeleteComment(params["pid"], params["cid"]); err != nil {

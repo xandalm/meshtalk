@@ -16,8 +16,8 @@ import (
 )
 
 func getSessionCookie(response *httptest.ResponseRecorder) (*http.Cookie, error) {
-	setCookie := response.Header()["Set-Cookie"]
-	if len(setCookie) != 1 {
+	setCookie, ok := response.Header()["Set-Cookie"]
+	if !ok || len(setCookie) == 0 {
 		return nil, errors.New("missing set-cookie")
 	}
 	cookie := map[string]string{}
@@ -31,18 +31,32 @@ func getSessionCookie(response *httptest.ResponseRecorder) (*http.Cookie, error)
 	}
 	maxAge, _ := strconv.Atoi(cookie["Max-Age"])
 	httpOnly, _ := strconv.ParseBool(cookie["HttpOnly"])
-	httpCookie := &http.Cookie{
-		Name:     "SESSION_ID",
-		Value:    cookie["SESSION_ID"],
+	cookieName := SessionCookieName()
+	sessionCookie := &http.Cookie{
+		Name:     cookieName,
+		Value:    cookie[cookieName],
 		Path:     cookie["Path"],
 		HttpOnly: httpOnly,
 		MaxAge:   maxAge,
 	}
 	expires, hasExpires := cookie["Expires"]
 	if hasExpires {
-		httpCookie.Expires, _ = time.Parse(time.RFC1123, expires)
+		sessionCookie.Expires, _ = time.Parse(time.RFC1123, expires)
 	}
-	return httpCookie, nil
+	return sessionCookie, nil
+}
+
+func login(t *testing.T, server *Server) *http.Cookie {
+	request, _ := http.NewRequest(http.MethodPost, "/login", nil)
+	response := httptest.NewRecorder()
+	server.ServeHTTP(response, request)
+
+	cookie, err := getSessionCookie(response)
+	if err != nil {
+		t.Fatalf("cannot login, %v", err)
+	}
+
+	return cookie
 }
 
 func TestGETPosts(t *testing.T) {
@@ -66,20 +80,11 @@ func TestGETPosts(t *testing.T) {
 	}
 	server := NewServer(storage)
 
-	// Login
-	request, _ := http.NewRequest(http.MethodPost, "/login", nil)
-	response := httptest.NewRecorder()
-	server.ServeHTTP(response, request)
-
-	httpCookie, err := getSessionCookie(response)
-	if err != nil {
-		t.Fatalf("cannot login, %v", err)
-	}
+	sessionCookie := login(t, server)
 
 	t.Run("returns post with id equal to 1", func(t *testing.T) {
 
-		request := newGetPostRequest("1")
-		request.AddCookie(httpCookie)
+		request := newGetPostRequest(sessionCookie, "1")
 		response := httptest.NewRecorder()
 
 		server.ServeHTTP(response, request)
@@ -94,8 +99,7 @@ func TestGETPosts(t *testing.T) {
 
 	t.Run("returns post with id equal to 2", func(t *testing.T) {
 
-		request := newGetPostRequest("2")
-		request.AddCookie(httpCookie)
+		request := newGetPostRequest(sessionCookie, "2")
 		response := httptest.NewRecorder()
 
 		server.ServeHTTP(response, request)
@@ -109,8 +113,7 @@ func TestGETPosts(t *testing.T) {
 	})
 
 	t.Run("returns 404 on nonexistent post", func(t *testing.T) {
-		request := newGetPostRequest("0")
-		request.AddCookie(httpCookie)
+		request := newGetPostRequest(sessionCookie, "0")
 		response := httptest.NewRecorder()
 
 		server.ServeHTTP(response, request)
@@ -121,7 +124,7 @@ func TestGETPosts(t *testing.T) {
 
 	t.Run("returns all posts", func(t *testing.T) {
 		request, _ := http.NewRequest(http.MethodGet, "/posts", nil)
-		request.AddCookie(httpCookie)
+		request.AddCookie(sessionCookie)
 		response := httptest.NewRecorder()
 
 		server.ServeHTTP(response, request)
@@ -144,8 +147,7 @@ func TestGETPosts(t *testing.T) {
 
 	t.Run("returns 500 on unexpected error", func(t *testing.T) {
 		server := NewServer(&stubFailingStorage{})
-		request := newGetPostRequest("0")
-		request.AddCookie(httpCookie)
+		request := newGetPostRequest(sessionCookie, "0")
 		response := httptest.NewRecorder()
 
 		server.ServeHTTP(response, request)
@@ -166,8 +168,10 @@ func TestPOSTPosts(t *testing.T) {
 	}
 	server := NewServer(storage)
 
+	sessionCookie := login(t, server)
+
 	t.Run(`returns 201 and post after create post`, func(t *testing.T) {
-		request := newCreatePostRequest(`{"title": "Post X", "content": "Post Content", "author": "1"}`)
+		request := newCreatePostRequest(sessionCookie, `{"title": "Post X", "content": "Post Content", "author": "1"}`)
 		response := httptest.NewRecorder()
 
 		server.ServeHTTP(response, request)
@@ -203,7 +207,7 @@ func TestPOSTPosts(t *testing.T) {
 	})
 	t.Run("returns 400", func(t *testing.T) {
 		t.Run("unsupported error", func(t *testing.T) {
-			request := newCreatePostRequest(`data`)
+			request := newCreatePostRequest(sessionCookie, `data`)
 			response := httptest.NewRecorder()
 
 			server.ServeHTTP(response, request)
@@ -216,7 +220,7 @@ func TestPOSTPosts(t *testing.T) {
 			assertGotError(t, got, want)
 		})
 		t.Run("missing fields error", func(t *testing.T) {
-			request := newCreatePostRequest(`{}`)
+			request := newCreatePostRequest(sessionCookie, `{}`)
 			response := httptest.NewRecorder()
 
 			server.ServeHTTP(response, request)
@@ -229,7 +233,7 @@ func TestPOSTPosts(t *testing.T) {
 			assertGotError(t, got, want)
 		})
 		t.Run("nonexistent author", func(t *testing.T) {
-			request := newCreatePostRequest(`{"title": "Post X", "content": "Post Content", "author": "2"}`)
+			request := newCreatePostRequest(sessionCookie, `{"title": "Post X", "content": "Post Content", "author": "2"}`)
 			response := httptest.NewRecorder()
 
 			server.ServeHTTP(response, request)
@@ -246,7 +250,7 @@ func TestPOSTPosts(t *testing.T) {
 		storage := &stubFailingStorage{}
 		server := NewServer(storage)
 
-		request := newCreatePostRequest(`{"title": "Post X", "content": "Post Content", "author": "Alex"}`)
+		request := newCreatePostRequest(sessionCookie, `{"title": "Post X", "content": "Post Content", "author": "Alex"}`)
 		response := httptest.NewRecorder()
 
 		server.ServeHTTP(response, request)
@@ -265,8 +269,10 @@ func TestPUTPosts(t *testing.T) {
 	}
 	server := NewServer(storage)
 
+	sessionCookie := login(t, server)
+
 	t.Run("returns 204 on post edited", func(t *testing.T) {
-		request := newEditPostRequest("1", `{"Content": "Edited Content"}`)
+		request := newEditPostRequest(sessionCookie, "1", `{"Content": "Edited Content"}`)
 		response := httptest.NewRecorder()
 
 		server.ServeHTTP(response, request)
@@ -281,7 +287,7 @@ func TestPUTPosts(t *testing.T) {
 		}
 	})
 	t.Run("returns 404 on nonexistent post", func(t *testing.T) {
-		request := newEditPostRequest("3", `{"Content": "Edited Content"}`)
+		request := newEditPostRequest(sessionCookie, "3", `{"Content": "Edited Content"}`)
 		response := httptest.NewRecorder()
 
 		server.ServeHTTP(response, request)
@@ -290,7 +296,7 @@ func TestPUTPosts(t *testing.T) {
 
 	})
 	t.Run("returns 400 and nothing to update error", func(t *testing.T) {
-		request := newEditPostRequest("1", `{}`)
+		request := newEditPostRequest(sessionCookie, "1", `{}`)
 		response := httptest.NewRecorder()
 
 		server.ServeHTTP(response, request)
@@ -308,7 +314,7 @@ func TestPUTPosts(t *testing.T) {
 		}
 		server := NewServer(storage)
 		jsonRaw := `{"Content": "Edited Content"}`
-		request := newEditPostRequest("1", jsonRaw)
+		request := newEditPostRequest(sessionCookie, "1", jsonRaw)
 		response := httptest.NewRecorder()
 
 		server.ServeHTTP(response, request)
@@ -325,7 +331,10 @@ func TestDELETEPosts(t *testing.T) {
 			},
 		}
 		server := NewServer(storage)
-		request := newDeletePostRequest("1")
+
+		sessionCookie := login(t, server)
+
+		request := newDeletePostRequest(sessionCookie, "1")
 		response := httptest.NewRecorder()
 
 		server.ServeHTTP(response, request)
@@ -339,7 +348,9 @@ func TestDELETEPosts(t *testing.T) {
 		storage := &stubFailingStorage{}
 		server := NewServer(storage)
 
-		request := newDeletePostRequest("1")
+		sessionCookie := login(t, server)
+
+		request := newDeletePostRequest(sessionCookie, "1")
 		response := httptest.NewRecorder()
 
 		server.ServeHTTP(response, request)
@@ -396,10 +407,12 @@ func TestGETComments(t *testing.T) {
 	}
 	server := NewServer(storage)
 
+	sessionCookie := login(t, server)
+
 	t.Run("returns comments from post 1", func(t *testing.T) {
 
 		t.Run("for /comments?post=1", func(t *testing.T) {
-			request := newGetCommentsRequest("1", "")
+			request := newGetCommentsRequest(sessionCookie, "1", "")
 			response := httptest.NewRecorder()
 
 			server.ServeHTTP(response, request)
@@ -418,7 +431,7 @@ func TestGETComments(t *testing.T) {
 		})
 
 		t.Run("for /posts/1/comments", func(t *testing.T) {
-			request := newGetPostCommentsRequest("1", "")
+			request := newGetPostCommentsRequest(sessionCookie, "1", "")
 			response := httptest.NewRecorder()
 
 			server.ServeHTTP(response, request)
@@ -440,7 +453,7 @@ func TestGETComments(t *testing.T) {
 	t.Run("returns comment 2 from post 1", func(t *testing.T) {
 
 		t.Run("for /comments?post=1&comment=2", func(t *testing.T) {
-			request := newGetCommentsRequest("1", "2")
+			request := newGetCommentsRequest(sessionCookie, "1", "2")
 			response := httptest.NewRecorder()
 
 			server.ServeHTTP(response, request)
@@ -457,7 +470,7 @@ func TestGETComments(t *testing.T) {
 		})
 
 		t.Run("for /posts/1/comments/2", func(t *testing.T) {
-			request := newGetPostCommentsRequest("1", "2")
+			request := newGetPostCommentsRequest(sessionCookie, "1", "2")
 			response := httptest.NewRecorder()
 
 			server.ServeHTTP(response, request)
@@ -475,7 +488,7 @@ func TestGETComments(t *testing.T) {
 	})
 
 	t.Run("returns 404 when try to get comments from post 3", func(t *testing.T) {
-		request := newGetPostCommentsRequest("3", "")
+		request := newGetPostCommentsRequest(sessionCookie, "3", "")
 		response := httptest.NewRecorder()
 
 		server.ServeHTTP(response, request)
@@ -485,7 +498,7 @@ func TestGETComments(t *testing.T) {
 	})
 
 	t.Run("returns 404 when try to get comment 3 from post 2", func(t *testing.T) {
-		request := newGetPostCommentsRequest("2", "3")
+		request := newGetPostCommentsRequest(sessionCookie, "2", "3")
 		response := httptest.NewRecorder()
 
 		server.ServeHTTP(response, request)
@@ -495,7 +508,7 @@ func TestGETComments(t *testing.T) {
 	})
 
 	t.Run("returns all comments", func(t *testing.T) {
-		request := newGetCommentsRequest("", "")
+		request := newGetCommentsRequest(sessionCookie, "", "")
 		response := httptest.NewRecorder()
 
 		server.ServeHTTP(response, request)
@@ -513,7 +526,7 @@ func TestGETComments(t *testing.T) {
 
 	t.Run("returns 500 on unexpected error", func(t *testing.T) {
 		server := NewServer(&stubFailingStorage{})
-		request := newGetCommentsRequest("1", "1")
+		request := newGetCommentsRequest(sessionCookie, "1", "1")
 		response := httptest.NewRecorder()
 
 		server.ServeHTTP(response, request)
@@ -550,8 +563,10 @@ func TestPOSTComments(t *testing.T) {
 	}
 	server := NewServer(storage)
 
+	sessionCookie := login(t, server)
+
 	t.Run(`returns 201 and comment after create comment`, func(t *testing.T) {
-		request := newCreateCommentRequest("1", `{"content": "Comment Content", "author": "1"}`)
+		request := newCreateCommentRequest(sessionCookie, "1", `{"content": "Comment Content", "author": "1"}`)
 		response := httptest.NewRecorder()
 
 		server.ServeHTTP(response, request)
@@ -591,7 +606,7 @@ func TestPOSTComments(t *testing.T) {
 	})
 
 	t.Run("returns 404 because the post doesn't exist", func(t *testing.T) {
-		request := newCreateCommentRequest("3", `{"content": "Comment Content", "author": "1"}`)
+		request := newCreateCommentRequest(sessionCookie, "3", `{"content": "Comment Content", "author": "1"}`)
 		response := httptest.NewRecorder()
 
 		server.ServeHTTP(response, request)
@@ -603,7 +618,7 @@ func TestPOSTComments(t *testing.T) {
 	t.Run("returns 400", func(t *testing.T) {
 
 		t.Run("unsupported data", func(t *testing.T) {
-			request := newCreateCommentRequest("1", `data`)
+			request := newCreateCommentRequest(sessionCookie, "1", `data`)
 			response := httptest.NewRecorder()
 
 			server.ServeHTTP(response, request)
@@ -617,7 +632,7 @@ func TestPOSTComments(t *testing.T) {
 		})
 
 		t.Run("missing fields error", func(t *testing.T) {
-			request := newCreateCommentRequest("1", `{}`)
+			request := newCreateCommentRequest(sessionCookie, "1", `{}`)
 			response := httptest.NewRecorder()
 
 			server.ServeHTTP(response, request)
@@ -631,7 +646,7 @@ func TestPOSTComments(t *testing.T) {
 		})
 
 		t.Run("nonexistent author", func(t *testing.T) {
-			request := newCreateCommentRequest("1", `{"content": "Comment Content", "author": "2"}`)
+			request := newCreateCommentRequest(sessionCookie, "1", `{"content": "Comment Content", "author": "2"}`)
 			response := httptest.NewRecorder()
 
 			server.ServeHTTP(response, request)
@@ -647,7 +662,7 @@ func TestPOSTComments(t *testing.T) {
 
 	t.Run("returns 500 on unexpected error", func(t *testing.T) {
 		server := NewServer(&stubFailingStorage{})
-		request := newCreateCommentRequest("1", `{"content": "Comment Content", "author": "1"}`)
+		request := newCreateCommentRequest(sessionCookie, "1", `{"content": "Comment Content", "author": "1"}`)
 		response := httptest.NewRecorder()
 
 		server.ServeHTTP(response, request)
@@ -688,8 +703,10 @@ func TestPUTComments(t *testing.T) {
 	}
 	server := NewServer(storage)
 
+	sessionCookie := login(t, server)
+
 	t.Run("returns 204", func(t *testing.T) {
-		request := newEditCommentRequest("1", "1", `{"Content": "Edited Content"}`)
+		request := newEditCommentRequest(sessionCookie, "1", "1", `{"Content": "Edited Content"}`)
 		response := httptest.NewRecorder()
 
 		server.ServeHTTP(response, request)
@@ -704,7 +721,7 @@ func TestPUTComments(t *testing.T) {
 		}
 	})
 	t.Run("returns 404 on nonexistent comment", func(t *testing.T) {
-		request := newEditCommentRequest("1", "3", `{"Content": "Edited Content"}`)
+		request := newEditCommentRequest(sessionCookie, "1", "3", `{"Content": "Edited Content"}`)
 		response := httptest.NewRecorder()
 
 		server.ServeHTTP(response, request)
@@ -713,7 +730,7 @@ func TestPUTComments(t *testing.T) {
 
 	})
 	t.Run("returns 404 because the post doesn't exist", func(t *testing.T) {
-		request := newEditCommentRequest("2", "1", `{"Content": "Edited Content"}`)
+		request := newEditCommentRequest(sessionCookie, "2", "1", `{"Content": "Edited Content"}`)
 		response := httptest.NewRecorder()
 
 		server.ServeHTTP(response, request)
@@ -722,7 +739,7 @@ func TestPUTComments(t *testing.T) {
 
 	})
 	t.Run("returns 400 and nothing to update error", func(t *testing.T) {
-		request := newEditCommentRequest("1", "1", `{}`)
+		request := newEditCommentRequest(sessionCookie, "1", "1", `{}`)
 		response := httptest.NewRecorder()
 
 		server.ServeHTTP(response, request)
@@ -735,7 +752,7 @@ func TestPUTComments(t *testing.T) {
 	t.Run("returns 500 on unexpected error", func(t *testing.T) {
 		storage := &stubFailingStorage{}
 		server := NewServer(storage)
-		request := newEditCommentRequest("1", "2", `{"Content": "Edited Content"}`)
+		request := newEditCommentRequest(sessionCookie, "1", "2", `{"Content": "Edited Content"}`)
 		response := httptest.NewRecorder()
 
 		server.ServeHTTP(response, request)
@@ -776,8 +793,10 @@ func TestDELETEComments(t *testing.T) {
 	}
 	server := NewServer(storage)
 
+	sessionCookie := login(t, server)
+
 	t.Run("returns 204", func(t *testing.T) {
-		request := newDeleteCommentRequest("1", "2")
+		request := newDeleteCommentRequest(sessionCookie, "1", "2")
 		response := httptest.NewRecorder()
 
 		server.ServeHTTP(response, request)
@@ -790,7 +809,7 @@ func TestDELETEComments(t *testing.T) {
 	})
 
 	t.Run("returns 404 because the post doesn't exist", func(t *testing.T) {
-		request := newDeleteCommentRequest("2", "1")
+		request := newDeleteCommentRequest(sessionCookie, "2", "1")
 		response := httptest.NewRecorder()
 
 		server.ServeHTTP(response, request)
@@ -802,7 +821,7 @@ func TestDELETEComments(t *testing.T) {
 	t.Run("returns 500 on unexpected error", func(t *testing.T) {
 		storage := &stubFailingStorage{}
 		server := NewServer(storage)
-		request := newDeleteCommentRequest("1", "1")
+		request := newDeleteCommentRequest(sessionCookie, "1", "1")
 		response := httptest.NewRecorder()
 
 		server.ServeHTTP(response, request)
@@ -815,8 +834,10 @@ func TestPOSTCustomers(t *testing.T) {
 	storage := NewStubStorage()
 	server := NewServer(storage)
 
+	sessionCookie := login(t, server)
+
 	t.Run("returns 201 and customer", func(t *testing.T) {
-		request := newCreateCustomerRequest(`{"name": "Marie"}`)
+		request := newCreateCustomerRequest(sessionCookie, `{"name": "Marie"}`)
 		response := httptest.NewRecorder()
 
 		server.ServeHTTP(response, request)
@@ -847,7 +868,7 @@ func TestPOSTCustomers(t *testing.T) {
 
 	t.Run("returns 400", func(t *testing.T) {
 		t.Run("unsupported error", func(t *testing.T) {
-			request := newCreateCustomerRequest(`data`)
+			request := newCreateCustomerRequest(sessionCookie, `data`)
 			response := httptest.NewRecorder()
 
 			server.ServeHTTP(response, request)
@@ -861,7 +882,7 @@ func TestPOSTCustomers(t *testing.T) {
 		})
 
 		t.Run("missing fields error", func(t *testing.T) {
-			request := newCreateCustomerRequest(`{}`)
+			request := newCreateCustomerRequest(sessionCookie, `{}`)
 			response := httptest.NewRecorder()
 
 			server.ServeHTTP(response, request)
@@ -878,7 +899,7 @@ func TestPOSTCustomers(t *testing.T) {
 	t.Run("returns 500 on unexpected error", func(t *testing.T) {
 		server := NewServer(&stubFailingStorage{})
 
-		request := newCreateCustomerRequest(`{"name": "Marie"}`)
+		request := newCreateCustomerRequest(sessionCookie, `{"name": "Marie"}`)
 		response := httptest.NewRecorder()
 
 		server.ServeHTTP(response, request)
@@ -899,8 +920,10 @@ func TestGETCustomers(t *testing.T) {
 	}
 	server := NewServer(storage)
 
+	sessionCookie := login(t, server)
+
 	t.Run("returns 200 and the customer data", func(t *testing.T) {
-		request := newGetCustomerRequest("1")
+		request := newGetCustomerRequest(sessionCookie, "1")
 		response := httptest.NewRecorder()
 
 		server.ServeHTTP(response, request)
@@ -914,7 +937,7 @@ func TestGETCustomers(t *testing.T) {
 	})
 
 	t.Run("returns 404 on nonexistent customer", func(t *testing.T) {
-		request := newGetCustomerRequest("2")
+		request := newGetCustomerRequest(sessionCookie, "2")
 		response := httptest.NewRecorder()
 
 		server.ServeHTTP(response, request)
@@ -926,7 +949,7 @@ func TestGETCustomers(t *testing.T) {
 	t.Run("returns 500 on unexpected error", func(t *testing.T) {
 		server := NewServer(&stubFailingStorage{})
 
-		request := newGetCustomerRequest("1")
+		request := newGetCustomerRequest(sessionCookie, "1")
 		response := httptest.NewRecorder()
 
 		server.ServeHTTP(response, request)
@@ -947,8 +970,10 @@ func TestPUTCustomers(t *testing.T) {
 	}
 	server := NewServer(storage)
 
+	sessionCookie := login(t, server)
+
 	t.Run("returns 204", func(t *testing.T) {
-		request := newEditCustomerRequest("1", `{"name": "Jhonny"}`)
+		request := newEditCustomerRequest(sessionCookie, "1", `{"name": "Jhonny"}`)
 		response := httptest.NewRecorder()
 
 		server.ServeHTTP(response, request)
@@ -964,7 +989,7 @@ func TestPUTCustomers(t *testing.T) {
 	})
 
 	t.Run("returns 404 on nonexistent customer", func(t *testing.T) {
-		request := newEditCustomerRequest("2", `{"name": "Marie"}`)
+		request := newEditCustomerRequest(sessionCookie, "2", `{"name": "Marie"}`)
 		response := httptest.NewRecorder()
 
 		server.ServeHTTP(response, request)
@@ -974,7 +999,7 @@ func TestPUTCustomers(t *testing.T) {
 	})
 
 	t.Run("returns 400 and nothing to update error", func(t *testing.T) {
-		request := newEditCustomerRequest("1", `{}`)
+		request := newEditCustomerRequest(sessionCookie, "1", `{}`)
 		response := httptest.NewRecorder()
 
 		server.ServeHTTP(response, request)
@@ -988,7 +1013,7 @@ func TestPUTCustomers(t *testing.T) {
 	t.Run("returns 500 on unexpected error", func(t *testing.T) {
 		server := NewServer(&stubFailingStorage{})
 
-		request := newEditCustomerRequest("1", `{"name": "James"}`)
+		request := newEditCustomerRequest(sessionCookie, "1", `{"name": "James"}`)
 		response := httptest.NewRecorder()
 
 		server.ServeHTTP(response, request)
@@ -1014,8 +1039,10 @@ func TestDELETECustomers(t *testing.T) {
 	}
 	server := NewServer(storage)
 
+	sessionCookie := login(t, server)
+
 	t.Run("returns 204", func(t *testing.T) {
-		request := newDeleteCustomerRequest("2")
+		request := newDeleteCustomerRequest(sessionCookie, "2")
 		response := httptest.NewRecorder()
 
 		server.ServeHTTP(response, request)
@@ -1031,7 +1058,7 @@ func TestDELETECustomers(t *testing.T) {
 		storage := &stubFailingStorage{}
 		server := NewServer(storage)
 
-		request := newDeleteCustomerRequest("1")
+		request := newDeleteCustomerRequest(sessionCookie, "1")
 		response := httptest.NewRecorder()
 
 		server.ServeHTTP(response, request)
@@ -1051,7 +1078,9 @@ func TestServerTimeout(t *testing.T) {
 		server := NewServer(storage)
 		server.SetTimeout(time.Second * 1)
 
-		request := newGetPostRequest("1")
+		sessionCookie := login(t, server)
+
+		request := newGetPostRequest(sessionCookie, "1")
 		response := httptest.NewRecorder()
 
 		server.ServeHTTP(response, request)
@@ -1066,27 +1095,31 @@ func newDate(year int, month time.Month, day, hour, min, sec, mlsec int) string 
 	return string(b)
 }
 
-func newGetPostRequest(id string) *http.Request {
+func newGetPostRequest(cookie *http.Cookie, id string) *http.Request {
 	req, _ := http.NewRequest(http.MethodGet, "/posts/"+id, nil)
+	req.AddCookie(cookie)
 	return req
 }
 
-func newCreatePostRequest(jsonRaw string) *http.Request {
+func newCreatePostRequest(cookie *http.Cookie, jsonRaw string) *http.Request {
 	req, _ := http.NewRequest(http.MethodPost, "/posts", strings.NewReader(jsonRaw))
+	req.AddCookie(cookie)
 	return req
 }
 
-func newEditPostRequest(id, jsonRaw string) *http.Request {
+func newEditPostRequest(cookie *http.Cookie, id, jsonRaw string) *http.Request {
 	req, _ := http.NewRequest(http.MethodPut, "/posts/"+id, strings.NewReader(jsonRaw))
+	req.AddCookie(cookie)
 	return req
 }
 
-func newDeletePostRequest(id string) *http.Request {
+func newDeletePostRequest(cookie *http.Cookie, id string) *http.Request {
 	req, _ := http.NewRequest(http.MethodDelete, "/posts/"+id, nil)
+	req.AddCookie(cookie)
 	return req
 }
 
-func newGetCommentsRequest(postId, commentId string) *http.Request {
+func newGetCommentsRequest(cookie *http.Cookie, postId, commentId string) *http.Request {
 	url := "/comments"
 	if postId != "" {
 		url = url + "?post=" + postId
@@ -1095,50 +1128,59 @@ func newGetCommentsRequest(postId, commentId string) *http.Request {
 		}
 	}
 	req, _ := http.NewRequest(http.MethodGet, url, nil)
+	req.AddCookie(cookie)
 	return req
 }
 
-func newGetPostCommentsRequest(postId, commentId string) *http.Request {
+func newGetPostCommentsRequest(cookie *http.Cookie, postId, commentId string) *http.Request {
 	url := "/posts/" + postId + "/comments"
 	if commentId != "" {
 		url += "/" + commentId
 	}
 	req, _ := http.NewRequest(http.MethodGet, url, nil)
+	req.AddCookie(cookie)
 	return req
 }
 
-func newCreateCommentRequest(post, jsonRaw string) *http.Request {
+func newCreateCommentRequest(cookie *http.Cookie, post, jsonRaw string) *http.Request {
 	req, _ := http.NewRequest(http.MethodPost, "/posts/"+post+"/comments", strings.NewReader(jsonRaw))
+	req.AddCookie(cookie)
 	return req
 }
 
-func newEditCommentRequest(postId, commentId, jsonRaw string) *http.Request {
+func newEditCommentRequest(cookie *http.Cookie, postId, commentId, jsonRaw string) *http.Request {
 	req, _ := http.NewRequest(http.MethodPut, "/posts/"+postId+"/comments/"+commentId, strings.NewReader(jsonRaw))
+	req.AddCookie(cookie)
 	return req
 }
 
-func newDeleteCommentRequest(postId, commentId string) *http.Request {
+func newDeleteCommentRequest(cookie *http.Cookie, postId, commentId string) *http.Request {
 	req, _ := http.NewRequest(http.MethodDelete, "/posts/"+postId+"/comments/"+commentId, nil)
+	req.AddCookie(cookie)
 	return req
 }
 
-func newCreateCustomerRequest(jsonRaw string) *http.Request {
+func newCreateCustomerRequest(cookie *http.Cookie, jsonRaw string) *http.Request {
 	req, _ := http.NewRequest(http.MethodPost, "/customers", strings.NewReader(jsonRaw))
+	req.AddCookie(cookie)
 	return req
 }
 
-func newGetCustomerRequest(customerId string) *http.Request {
+func newGetCustomerRequest(cookie *http.Cookie, customerId string) *http.Request {
 	req, _ := http.NewRequest(http.MethodGet, "/customers/"+customerId, nil)
+	req.AddCookie(cookie)
 	return req
 }
 
-func newEditCustomerRequest(customerId, jsonRaw string) *http.Request {
+func newEditCustomerRequest(cookie *http.Cookie, customerId, jsonRaw string) *http.Request {
 	req, _ := http.NewRequest(http.MethodPut, "/customers/"+customerId, strings.NewReader(jsonRaw))
+	req.AddCookie(cookie)
 	return req
 }
 
-func newDeleteCustomerRequest(customerId string) *http.Request {
+func newDeleteCustomerRequest(cookie *http.Cookie, customerId string) *http.Request {
 	req, _ := http.NewRequest(http.MethodDelete, "/customers/"+customerId, nil)
+	req.AddCookie(cookie)
 	return req
 }
 
