@@ -217,8 +217,8 @@ func (s *Storage) GetCustomer(id string) (*entities.Customer, error) {
 	}, nil
 }
 
-func (s *Storage) EditCustomer(edit entities.CustomerInEditting) (*entities.Customer, error) {
-	found, ok := s.customers[edit.Id]
+func (s *Storage) EditCustomer(id string, edit entities.CustomerInEditting) (*entities.Customer, error) {
+	found, ok := s.customers[id]
 	if !ok || found.DeletedAt != "" {
 		return nil, storage.ErrCustomerNotFound
 	}

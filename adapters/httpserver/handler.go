@@ -37,6 +37,24 @@ type ResponseModel struct {
 	Error any `json:"error,omitempty"`
 }
 
+type CustomerInput struct {
+	Tag      *string `json:"tag"`
+	Name     *string `json:"name"`
+	Password *string `json:"password"`
+}
+
+type PostInput struct {
+	Title   *string `json:"title"`
+	Content *string `json:"content"`
+	Author  *string `json:"author"`
+}
+
+type CommentInput struct {
+	Post    *string `json:"post"`
+	Content *string `json:"content"`
+	Author  *string `json:"author"`
+}
+
 const (
 	ErrUnsupportedPostMessage       = "unsupported data to parse as post"
 	ErrMissingPostFieldsMessage     = "missing post fields (title, content and author are required)"
@@ -159,6 +177,9 @@ func (s *Server) writeResponseModelWithError(w http.ResponseWriter, err error) {
 		ErrUnsupportedPost,
 		ErrUnsupportedComment,
 		ErrUnsupportedCustomer,
+		ErrMissingCustomerFields,
+		ErrMissingPostFields,
+		ErrMissingCommentFields,
 		ErrNothingToUpdate:
 		w.WriteHeader(http.StatusBadRequest)
 	default:
@@ -214,12 +235,19 @@ func (s *Server) createCustomerHandler(w router.ResponseWriter, r *router.Reques
 		return
 	}
 
-	var customer entities.Customer
-	if err := r.ParseBodyInto(&customer); err != nil {
+	var input CustomerInput
+	if err := r.ParseBodyInto(&input); err != nil {
 		s.writeResponseModelWithError(w, ErrUnsupportedCustomer)
 		return
 	}
-	if err := s.storage.CreateCustomer(&customer); err != nil {
+	if input.Tag == nil || input.Name == nil || input.Password == nil {
+		s.writeResponseModelWithError(w, ErrMissingCustomerFields)
+		return
+	}
+
+	customer := entities.NewCustomer(*input.Tag, *input.Name, *input.Password)
+
+	if err := s.storage.CreateCustomer(customer); err != nil {
 		s.writeResponseModelWithError(w, err)
 		return
 	}
@@ -259,10 +287,15 @@ func (s *Server) editCustomerHandler(w router.ResponseWriter, r *router.Request)
 
 	params := r.Params()
 
-	var edit entities.CustomerInEditting
-	if err := r.ParseBodyInto(&edit); err != nil {
+	var input CustomerInput
+	if err := r.ParseBodyInto(&input); err != nil {
 		s.writeResponseModelWithError(w, ErrUnsupportedCustomer)
 		return
+	}
+
+	edit := entities.CustomerInEditting{
+		Name:     input.Name,
+		Password: input.Password,
 	}
 
 	if edit.Name == nil && edit.Password == nil {
@@ -301,14 +334,20 @@ func (s *Server) createPostHandler(w router.ResponseWriter, r *router.Request) {
 		return
 	}
 
-	var post entities.Post
-	err := r.ParseBodyInto(&post)
+	var input PostInput
+	err := r.ParseBodyInto(&input)
 	if err != nil {
 		s.writeResponseModelWithError(w, ErrUnsupportedPost)
 		return
 	}
+	if input.Title == nil || input.Content == nil || input.Author == nil {
+		s.writeResponseModelWithError(w, ErrMissingPostFields)
+		return
+	}
 
-	if err := s.storage.CreatePost(&post); err != nil {
+	post := entities.NewPost(*input.Title, *input.Content, *input.Author)
+
+	if err := s.storage.CreatePost(post); err != nil {
 		s.writeResponseModelWithError(w, err)
 		return
 	}
@@ -365,11 +404,16 @@ func (s *Server) editPostHandler(w router.ResponseWriter, r *router.Request) {
 
 	params := r.Params()
 
-	var edit entities.PostInEditting
-	err := r.ParseBodyInto(&edit)
+	var input PostInput
+	err := r.ParseBodyInto(&input)
 	if err != nil {
 		s.writeResponseModelWithError(w, ErrUnsupportedPost)
 		return
+	}
+
+	edit := entities.PostInEditting{
+		Title:   input.Title,
+		Content: input.Content,
 	}
 	edit.Id = params["post"]
 
@@ -493,17 +537,20 @@ func (s *Server) createPostCommentHandler(w router.ResponseWriter, r *router.Req
 
 	post := r.Params()["post"]
 
-	var comment entities.Comment
-	err := r.ParseBodyInto(&comment)
-
-	if err != nil {
+	var input CommentInput
+	if err := r.ParseBodyInto(&input); err != nil {
 		s.writeResponseModelWithError(w, ErrUnsupportedComment)
 		return
 	}
+	input.Post = &post
+	if input.Content == nil || input.Author == nil {
+		s.writeResponseModelWithError(w, ErrMissingCommentFields)
+		return
+	}
 
-	comment.Post = post
+	comment := entities.NewComment(*input.Post, *input.Content, *input.Author)
 
-	if err := s.storage.CreateComment(&comment); err != nil {
+	if err := s.storage.CreateComment(comment); err != nil {
 		s.writeResponseModelWithError(w, err)
 		return
 	}
@@ -521,14 +568,17 @@ func (s *Server) editPostCommentHandler(w router.ResponseWriter, r *router.Reque
 
 	params := r.Params()
 
-	var edit entities.CommentInEditting
-	if err := r.ParseBodyInto(&edit); err != nil {
+	var input CommentInput
+	if err := r.ParseBodyInto(&input); err != nil {
 		s.writeResponseModelWithError(w, ErrUnsupportedComment)
 		return
 	}
 
-	edit.Post = params["post"]
-	edit.Id = params["comment"]
+	edit := entities.CommentInEditting{
+		Post:    params["post"],
+		Id:      params["comment"],
+		Content: input.Content,
+	}
 
 	if edit.Content == nil {
 		s.writeResponseModelWithError(w, ErrNothingToUpdate)

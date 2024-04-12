@@ -11,6 +11,15 @@ type Customer struct {
 	DeletedAt string `json:"deletedAt"`
 }
 
+// Creates a new customer representation.
+func NewCustomer(tag, name, password string) *Customer {
+	return &Customer{
+		Tag:      tag,
+		Name:     name,
+		Password: password,
+	}
+}
+
 // It's like a helper to expose editable fields of the Customer.
 // The editable fields are pointers because this way is possible
 // to keep them optional to be edited.

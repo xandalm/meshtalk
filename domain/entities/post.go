@@ -11,6 +11,15 @@ type Post struct {
 	DeletedAt string `json:"deletedAt"`
 }
 
+// Creates a new post representation.
+func NewPost(title, content, author string) *Post {
+	return &Post{
+		Title:   title,
+		Content: content,
+		Author:  author,
+	}
+}
+
 // It's like a helper to expose editable fields of the Post.
 // The editable fields are pointers because this way is possible
 // to keep them optional to be edited.

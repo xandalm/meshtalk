@@ -901,7 +901,7 @@ func TestPOSTCustomers(t *testing.T) {
 				`{"name": "James"}`,
 				`{"password": "123456"}`,
 				`{"tag": "james", "name": "James"}`,
-				`{"name": "James", "passaword": "123456"}`,
+				`{"name": "James", "password": "123456"}`,
 				`{"tag": "james", "password": "123456"}`,
 			}
 
@@ -924,7 +924,7 @@ func TestPOSTCustomers(t *testing.T) {
 	t.Run("returns 500 on unexpected error", func(t *testing.T) {
 		server := NewServer(&stubFailingStorage{})
 
-		request := newCreateCustomerRequest(sessionCookie, `{"name": "Marie"}`)
+		request := newCreateCustomerRequest(sessionCookie, `{"tag": "marie", "name": "Marie", "password": "123456"}`)
 		response := httptest.NewRecorder()
 
 		server.ServeHTTP(response, request)
