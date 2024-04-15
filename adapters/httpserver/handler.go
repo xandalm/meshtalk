@@ -302,10 +302,9 @@ func (s *Server) editCustomerHandler(w router.ResponseWriter, r *router.Request)
 		s.writeResponseModelWithError(w, ErrNothingToUpdate)
 		return
 	}
+	edit.Id = params["customer"]
 
-	customer := params["customer"]
-
-	if _, err := s.storage.EditCustomer(customer, edit); err != nil {
+	if _, err := s.storage.EditCustomer(edit); err != nil {
 		s.writeResponseModelWithError(w, err)
 	}
 
