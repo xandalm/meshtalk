@@ -66,14 +66,14 @@ func TestGETPosts(t *testing.T) {
 				Id:        "1",
 				Title:     "Post 1",
 				Content:   "Post Content",
-				Author:    "1",
+				Author:    &entities.Customer{Id: "1"},
 				CreatedAt: newDate(2023, time.December, 4, 16, 30, 30, 100),
 			},
 			"2": {
 				Id:        "2",
 				Title:     "Post 2",
 				Content:   "Post Content",
-				Author:    "2",
+				Author:    &entities.Customer{Id: "2"},
 				CreatedAt: newDate(2023, time.December, 4, 17, 0, 0, 0),
 			},
 		},
@@ -184,14 +184,14 @@ func TestPOSTPosts(t *testing.T) {
 			Id:      "1",
 			Title:   "Post X",
 			Content: "Post Content",
-			Author:  "1",
+			Author:  &entities.Customer{Id: "1"},
 		}
 
 		if _, ok := storage.posts["1"]; !ok {
 			t.Fatal("didn't creates the post")
 		}
 
-		if got.Id != want.Id || got.Title != want.Title || got.Content != want.Content || got.Author != want.Author {
+		if got.Id != want.Id || got.Title != want.Title || got.Content != want.Content || got.Author.Id != want.Author.Id {
 			t.Errorf(
 				`did not get expected post, got {Id="%s", Title="%s", Content="%s", Author="%s"} want {Id="%s", Title="%s", Content="%s", Author="%s"}`,
 				got.Id,
@@ -265,7 +265,7 @@ func newPost(id, title, content, author string) *entities.Post {
 		Id:      id,
 		Title:   title,
 		Content: content,
-		Author:  author,
+		Author:  &entities.Customer{Id: author},
 	}
 }
 
@@ -375,14 +375,14 @@ func TestGETComments(t *testing.T) {
 				Id:        "1",
 				Title:     "Post 1",
 				Content:   "Post Content",
-				Author:    "1",
+				Author:    &entities.Customer{Id: "1"},
 				CreatedAt: newDate(2023, time.December, 4, 16, 30, 30, 100),
 			},
 			"2": {
 				Id:        "2",
 				Title:     "Post 2",
 				Content:   "Post Content",
-				Author:    "2",
+				Author:    &entities.Customer{Id: "2"},
 				CreatedAt: newDate(2023, time.December, 4, 17, 0, 0, 0),
 			},
 		},
@@ -392,14 +392,14 @@ func TestGETComments(t *testing.T) {
 					Id:        "1",
 					Post:      "1",
 					Content:   "Some comment",
-					Author:    "3",
+					Author:    &entities.Customer{Id: "3"},
 					CreatedAt: newDate(2024, time.January, 23, 12, 30, 30, 100),
 				},
 				"2": {
 					Id:        "2",
 					Post:      "1",
 					Content:   "Some comment",
-					Author:    "4",
+					Author:    &entities.Customer{Id: "4"},
 					CreatedAt: newDate(2024, time.January, 23, 12, 30, 30, 100),
 				},
 			},
@@ -408,7 +408,7 @@ func TestGETComments(t *testing.T) {
 					Id:        "1",
 					Post:      "2",
 					Content:   "Some comment",
-					Author:    "5",
+					Author:    &entities.Customer{Id: "5"},
 					CreatedAt: newDate(2024, time.January, 23, 12, 30, 30, 100),
 				},
 			},
@@ -557,14 +557,14 @@ func TestPOSTComments(t *testing.T) {
 				Id:        "1",
 				Title:     "Post 1",
 				Content:   "Post Content",
-				Author:    "1",
+				Author:    &entities.Customer{Id: "1"},
 				CreatedAt: newDate(2023, time.December, 4, 16, 30, 30, 100),
 			},
 			"2": {
 				Id:        "2",
 				Title:     "Post 2",
 				Content:   "Post Content",
-				Author:    "2",
+				Author:    &entities.Customer{Id: "2"},
 				CreatedAt: newDate(2023, time.December, 4, 17, 0, 0, 0),
 			},
 		},
@@ -587,7 +587,7 @@ func TestPOSTComments(t *testing.T) {
 			Id:      "1",
 			Post:    "1",
 			Content: "Comment Content",
-			Author:  "1",
+			Author:  &entities.Customer{Id: "1"},
 		}
 
 		comments, ok := storage.comments["1"]
@@ -599,7 +599,7 @@ func TestPOSTComments(t *testing.T) {
 			t.Fatal("didn't creates the comment")
 		}
 
-		if got.Id != want.Id || got.Post != want.Post || got.Content != want.Content || got.Author != want.Author {
+		if got.Id != want.Id || got.Post != want.Post || got.Content != want.Content || got.Author.Id != want.Author.Id {
 			t.Errorf(
 				`did not get expected comment, got {Id="%s", Title="%s", Content="%s", Author="%s"} want {Id="%s", Title="%s", Content="%s", Author="%s"}`,
 				got.Id,
@@ -687,7 +687,7 @@ func TestPUTComments(t *testing.T) {
 				Id:        "1",
 				Title:     "Post 1",
 				Content:   "Post Content",
-				Author:    "1",
+				Author:    &entities.Customer{Id: "1"},
 				CreatedAt: newDate(2023, time.December, 4, 16, 30, 30, 100),
 			},
 		},
@@ -697,14 +697,14 @@ func TestPUTComments(t *testing.T) {
 					Id:        "1",
 					Post:      "1",
 					Content:   "Some comment",
-					Author:    "2",
+					Author:    &entities.Customer{Id: "2"},
 					CreatedAt: newDate(2024, time.January, 23, 12, 30, 30, 100),
 				},
 				"2": {
 					Id:        "2",
 					Post:      "1",
 					Content:   "Some comment",
-					Author:    "3",
+					Author:    &entities.Customer{Id: "3"},
 					CreatedAt: newDate(2024, time.January, 23, 12, 30, 30, 100),
 				},
 			},
@@ -777,7 +777,7 @@ func TestDELETEComments(t *testing.T) {
 				Id:        "1",
 				Title:     "Post 1",
 				Content:   "Post Content",
-				Author:    "1",
+				Author:    &entities.Customer{Id: "1"},
 				CreatedAt: newDate(2023, time.December, 4, 16, 30, 30, 100),
 			},
 		},
@@ -787,14 +787,14 @@ func TestDELETEComments(t *testing.T) {
 					Id:        "1",
 					Post:      "1",
 					Content:   "Some comment",
-					Author:    "2",
+					Author:    &entities.Customer{Id: "2"},
 					CreatedAt: newDate(2024, time.January, 23, 12, 30, 30, 100),
 				},
 				"2": {
 					Id:        "2",
 					Post:      "1",
 					Content:   "Some comment",
-					Author:    "3",
+					Author:    &entities.Customer{Id: "3"},
 					CreatedAt: newDate(2024, time.January, 23, 12, 30, 30, 100),
 				},
 			},

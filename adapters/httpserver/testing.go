@@ -58,10 +58,10 @@ func (s *stubStorage) GetPosts() ([]entities.Post, error) {
 }
 
 func (s *stubStorage) CreatePost(post *entities.Post) error {
-	if post.Title == "" || post.Content == "" || post.Author == "" {
+	if post.Title == "" || post.Content == "" || post.Author == nil {
 		return storage.ErrMissingPostFields
 	}
-	if _, ok := s.customers[post.Author]; !ok {
+	if _, ok := s.customers[post.Author.Id]; !ok {
 		return storage.ErrUnrecognizedAuthor
 	}
 	post.Id = strconv.Itoa(len(s.posts) + 1)
@@ -139,13 +139,13 @@ func (s *stubStorage) GetComment(post, id string) (*entities.Comment, error) {
 }
 
 func (s *stubStorage) CreateComment(comment *entities.Comment) error {
-	if comment.Author == "" || comment.Content == "" {
+	if comment.Author == nil || comment.Content == "" {
 		return storage.ErrMissingCommentFields
 	}
 	if _, hasPost := s.posts[comment.Post]; !hasPost {
 		return storage.ErrPostNotFound
 	}
-	if _, ok := s.customers[comment.Author]; !ok {
+	if _, ok := s.customers[comment.Author.Id]; !ok {
 		return storage.ErrUnrecognizedAuthor
 	}
 	_, hasComments := s.comments[comment.Post]
