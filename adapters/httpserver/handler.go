@@ -344,7 +344,7 @@ func (s *Server) createPostHandler(w router.ResponseWriter, r *router.Request) {
 		return
 	}
 
-	author := &entities.Customer{Id: *input.Author}
+	author := entities.Customer{Id: *input.Author}
 	post := entities.NewPost(*input.Title, *input.Content, author)
 
 	if err := s.storage.CreatePost(post); err != nil {
@@ -548,7 +548,7 @@ func (s *Server) createPostCommentHandler(w router.ResponseWriter, r *router.Req
 		return
 	}
 
-	author := &entities.Customer{Id: *input.Author}
+	author := entities.Customer{Id: *input.Author}
 	comment := entities.NewComment(*input.Post, *input.Content, author)
 
 	if err := s.storage.CreateComment(comment); err != nil {

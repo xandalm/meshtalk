@@ -61,20 +61,32 @@ func login(t *testing.T, server *Server) *http.Cookie {
 
 func TestGETPosts(t *testing.T) {
 	storage := &stubStorage{
-		posts: map[string]entities.Post{
+		customers: map[string]stubCustomer{
 			"1": {
-				Id:        "1",
-				Title:     "Post 1",
-				Content:   "Post Content",
-				Author:    &entities.Customer{Id: "1"},
-				CreatedAt: newDate(2023, time.December, 4, 16, 30, 30, 100),
+				Id:       "1",
+				Tag:      "alex",
+				Name:     "Alex",
+				Password: "123456",
 			},
 			"2": {
-				Id:        "2",
-				Title:     "Post 2",
-				Content:   "Post Content",
-				Author:    &entities.Customer{Id: "2"},
-				CreatedAt: newDate(2023, time.December, 4, 17, 0, 0, 0),
+				Id:       "2",
+				Tag:      "andre",
+				Name:     "Andre",
+				Password: "123456",
+			},
+		},
+		posts: map[string]stubPost{
+			"1": {
+				Id:      "1",
+				Title:   "Post 1",
+				Content: "Post Content",
+				Author:  "1",
+			},
+			"2": {
+				Id:      "2",
+				Title:   "Post 2",
+				Content: "Post Content",
+				Author:  "2",
 			},
 		},
 	}
@@ -92,9 +104,9 @@ func TestGETPosts(t *testing.T) {
 		assertStatus(t, response, http.StatusOK)
 
 		got := getPostFromResponseModel(t, response.Body)
-		want := storage.posts["1"]
+		want, _ := storage.GetPost("1")
 
-		assertGotPost(t, got, want)
+		assertGotPost(t, got, *want)
 	})
 
 	t.Run("returns post with id equal to 2", func(t *testing.T) {
@@ -107,9 +119,9 @@ func TestGETPosts(t *testing.T) {
 		assertStatus(t, response, http.StatusOK)
 
 		got := getPostFromResponseModel(t, response.Body)
-		want := storage.posts["2"]
+		want, _ := storage.GetPost("2")
 
-		assertGotPost(t, got, want)
+		assertGotPost(t, got, *want)
 	})
 
 	t.Run("returns 404 on nonexistent post", func(t *testing.T) {
@@ -140,7 +152,8 @@ func TestGETPosts(t *testing.T) {
 			t.Fatalf("unable to parse data into posts list, %v", err)
 		}
 
-		for _, p := range storage.posts {
+		posts, _ := storage.GetPosts()
+		for _, p := range posts {
 			assertContains(t, got, p)
 		}
 	})
@@ -158,13 +171,14 @@ func TestGETPosts(t *testing.T) {
 
 func TestPOSTPosts(t *testing.T) {
 	storage := &stubStorage{
-		customers: map[string]entities.Customer{
+		customers: map[string]stubCustomer{
 			"1": {
 				Id:   "1",
+				Tag:  "alex",
 				Name: "Alex",
 			},
 		},
-		posts: map[string]entities.Post{},
+		posts: map[string]stubPost{},
 	}
 	server := NewServer(storage)
 
@@ -180,30 +194,13 @@ func TestPOSTPosts(t *testing.T) {
 
 		got := getPostFromResponseModel(t, response.Body)
 
-		want := entities.Post{
-			Id:      "1",
-			Title:   "Post X",
-			Content: "Post Content",
-			Author:  &entities.Customer{Id: "1"},
-		}
+		want, _ := storage.GetPost("1")
 
-		if _, ok := storage.posts["1"]; !ok {
+		if want == nil {
 			t.Fatal("didn't creates the post")
 		}
 
-		if got.Id != want.Id || got.Title != want.Title || got.Content != want.Content || got.Author.Id != want.Author.Id {
-			t.Errorf(
-				`did not get expected post, got {Id="%s", Title="%s", Content="%s", Author="%s"} want {Id="%s", Title="%s", Content="%s", Author="%s"}`,
-				got.Id,
-				got.Title,
-				got.Content,
-				got.Author,
-				want.Id,
-				want.Title,
-				want.Content,
-				want.Author,
-			)
-		}
+		assertGotPost(t, got, *want)
 	})
 	t.Run("returns 400", func(t *testing.T) {
 		t.Run("unsupported error", func(t *testing.T) {
@@ -250,7 +247,7 @@ func TestPOSTPosts(t *testing.T) {
 		storage := &stubFailingStorage{}
 		server := NewServer(storage)
 
-		request := newCreatePostRequest(sessionCookie, `{"title": "Post X", "content": "Post Content", "author": "Alex"}`)
+		request := newCreatePostRequest(sessionCookie, `{"title": "Post X", "content": "Post Content", "author": "1"}`)
 		response := httptest.NewRecorder()
 
 		server.ServeHTTP(response, request)
@@ -260,20 +257,15 @@ func TestPOSTPosts(t *testing.T) {
 	})
 }
 
-func newPost(id, title, content, author string) *entities.Post {
-	return &entities.Post{
-		Id:      id,
-		Title:   title,
-		Content: content,
-		Author:  &entities.Customer{Id: author},
-	}
-}
-
 func TestPUTPosts(t *testing.T) {
 	storage := &stubStorage{
-		posts: map[string]entities.Post{
-			"1": *newPost("1", "Post 1", "Post Content", "1"),
-			"2": *newPost("2", "Post 2", "Post Content", "2"),
+		customers: map[string]stubCustomer{
+			"1": {"1", "alex", "Alex", "123"},
+			"2": {"2", "andre", "Andre", "123"},
+		},
+		posts: map[string]stubPost{
+			"1": {"1", "Post 1", "Post Content", "1"},
+			"2": {"2", "Post 2", "Post Content", "2"},
 		},
 	}
 	server := NewServer(storage)
@@ -317,8 +309,8 @@ func TestPUTPosts(t *testing.T) {
 	})
 	t.Run("returns 500 on unexpected error", func(t *testing.T) {
 		storage := &stubFailingStorage{
-			posts: map[string]entities.Post{
-				"1": *newPost("1", "Post 1", "Post Content", "1"),
+			posts: map[string]stubPost{
+				"1": {"1", "Post 1", "Post Content", "1"},
 			},
 		}
 		server := NewServer(storage)
@@ -335,8 +327,8 @@ func TestPUTPosts(t *testing.T) {
 func TestDELETEPosts(t *testing.T) {
 	t.Run("returns 200 on post deleted", func(t *testing.T) {
 		storage := &stubStorage{
-			posts: map[string]entities.Post{
-				"1": *newPost("1", "Post 1", "Post Content", "1"),
+			posts: map[string]stubPost{
+				"1": {"1", "Post 1", "Post Content", "1"},
 			},
 		}
 		server := NewServer(storage)
@@ -370,47 +362,21 @@ func TestDELETEPosts(t *testing.T) {
 
 func TestGETComments(t *testing.T) {
 	storage := &stubStorage{
-		posts: map[string]entities.Post{
-			"1": {
-				Id:        "1",
-				Title:     "Post 1",
-				Content:   "Post Content",
-				Author:    &entities.Customer{Id: "1"},
-				CreatedAt: newDate(2023, time.December, 4, 16, 30, 30, 100),
-			},
-			"2": {
-				Id:        "2",
-				Title:     "Post 2",
-				Content:   "Post Content",
-				Author:    &entities.Customer{Id: "2"},
-				CreatedAt: newDate(2023, time.December, 4, 17, 0, 0, 0),
-			},
+		customers: map[string]stubCustomer{
+			"1": {"1", "alex", "Alex", ""},
+			"2": {"1", "john", "John", ""},
 		},
-		comments: map[string]map[string]entities.Comment{
+		posts: map[string]stubPost{
+			"1": {"1", "Post 1", "Post Content", "1"},
+			"2": {"2", "Post 2", "Post Content", "2"},
+		},
+		comments: map[string]map[string]stubComment{
 			"1": {
-				"1": {
-					Id:        "1",
-					Post:      "1",
-					Content:   "Some comment",
-					Author:    &entities.Customer{Id: "3"},
-					CreatedAt: newDate(2024, time.January, 23, 12, 30, 30, 100),
-				},
-				"2": {
-					Id:        "2",
-					Post:      "1",
-					Content:   "Some comment",
-					Author:    &entities.Customer{Id: "4"},
-					CreatedAt: newDate(2024, time.January, 23, 12, 30, 30, 100),
-				},
+				"1": {"1", "1", "Some comment", "2"},
+				"2": {"2", "1", "Some comment", "1"},
 			},
 			"2": {
-				"1": {
-					Id:        "1",
-					Post:      "2",
-					Content:   "Some comment",
-					Author:    &entities.Customer{Id: "5"},
-					CreatedAt: newDate(2024, time.January, 23, 12, 30, 30, 100),
-				},
+				"1": {"1", "2", "Some comment", "1"},
 			},
 		},
 	}
@@ -430,11 +396,12 @@ func TestGETComments(t *testing.T) {
 
 			got := getCommentsListFromResponseModel(t, response.Body)
 
-			for _, c := range storage.comments["1"] {
+			comments, _ := storage.GetComments("1")
+			for _, c := range comments {
 				assertContains(t, got, c)
 			}
 
-			if len(got) != len(storage.comments["1"]) {
+			if len(got) != len(comments) {
 				t.Error("got unexpected comment(s)")
 			}
 		})
@@ -449,11 +416,12 @@ func TestGETComments(t *testing.T) {
 
 			got := getCommentsListFromResponseModel(t, response.Body)
 
-			for _, c := range storage.comments["1"] {
+			comments, _ := storage.GetComments("1")
+			for _, c := range comments {
 				assertContains(t, got, c)
 			}
 
-			if len(got) != len(storage.comments["1"]) {
+			if len(got) != len(comments) {
 				t.Error("got unexpected comment(s)")
 			}
 		})
@@ -475,7 +443,8 @@ func TestGETComments(t *testing.T) {
 				t.Fatal("expect only one comment, but got more than one")
 			}
 
-			assertContains(t, got, storage.comments["1"]["2"])
+			want, _ := storage.GetComment("1", "2")
+			assertContains(t, got, *want)
 		})
 
 		t.Run("for /posts/1/comments/2", func(t *testing.T) {
@@ -487,12 +456,9 @@ func TestGETComments(t *testing.T) {
 			assertStatus(t, response, http.StatusOK)
 
 			got := getCommentFromResponseModel(t, response.Body)
-			want := storage.comments["1"]["2"]
+			want, _ := storage.GetComment("1", "2")
 
-			assertGotComment(t, got, want)
-			// if !reflect.DeepEqual(got, want) {
-			// 	t.Errorf("got comment %v, but want %v", got, want)
-			// }
+			assertGotComment(t, got, *want)
 		})
 	})
 
@@ -528,7 +494,8 @@ func TestGETComments(t *testing.T) {
 
 		for _, cs := range storage.comments {
 			for _, c := range cs {
-				assertContains(t, got, c)
+				want, _ := storage.GetComment(c.Post, c.Id)
+				assertContains(t, got, *want)
 			}
 		}
 	})
@@ -546,29 +513,23 @@ func TestGETComments(t *testing.T) {
 
 func TestPOSTComments(t *testing.T) {
 	storage := &stubStorage{
-		customers: map[string]entities.Customer{
+		customers: map[string]stubCustomer{
 			"1": {
 				Id:   "1",
+				Tag:  "alex",
 				Name: "Alex",
 			},
-		},
-		posts: map[string]entities.Post{
-			"1": {
-				Id:        "1",
-				Title:     "Post 1",
-				Content:   "Post Content",
-				Author:    &entities.Customer{Id: "1"},
-				CreatedAt: newDate(2023, time.December, 4, 16, 30, 30, 100),
-			},
 			"2": {
-				Id:        "2",
-				Title:     "Post 2",
-				Content:   "Post Content",
-				Author:    &entities.Customer{Id: "2"},
-				CreatedAt: newDate(2023, time.December, 4, 17, 0, 0, 0),
+				Id:   "2",
+				Tag:  "andre",
+				Name: "Andre",
 			},
 		},
-		comments: map[string]map[string]entities.Comment{},
+		posts: map[string]stubPost{
+			"1": {"1", "Post 1", "Post Content", "1"},
+			"2": {"2", "Post 2", "Post Content", "2"},
+		},
+		comments: map[string]map[string]stubComment{},
 	}
 	server := NewServer(storage)
 
@@ -583,12 +544,7 @@ func TestPOSTComments(t *testing.T) {
 		assertStatus(t, response, http.StatusCreated)
 
 		got := getCommentFromResponseModel(t, response.Body)
-		want := entities.Comment{
-			Id:      "1",
-			Post:    "1",
-			Content: "Comment Content",
-			Author:  &entities.Customer{Id: "1"},
-		}
+		want, _ := storage.GetComment("1", "1")
 
 		comments, ok := storage.comments["1"]
 		if !ok {
@@ -599,19 +555,7 @@ func TestPOSTComments(t *testing.T) {
 			t.Fatal("didn't creates the comment")
 		}
 
-		if got.Id != want.Id || got.Post != want.Post || got.Content != want.Content || got.Author.Id != want.Author.Id {
-			t.Errorf(
-				`did not get expected comment, got {Id="%s", Title="%s", Content="%s", Author="%s"} want {Id="%s", Title="%s", Content="%s", Author="%s"}`,
-				got.Id,
-				got.Post,
-				got.Content,
-				got.Author,
-				want.Id,
-				want.Post,
-				want.Content,
-				want.Author,
-			)
-		}
+		assertGotComment(t, got, *want)
 	})
 
 	t.Run("returns 404 because the post doesn't exist", func(t *testing.T) {
@@ -655,7 +599,7 @@ func TestPOSTComments(t *testing.T) {
 		})
 
 		t.Run("nonexistent author", func(t *testing.T) {
-			request := newCreateCommentRequest(sessionCookie, "1", `{"content": "Comment Content", "author": "2"}`)
+			request := newCreateCommentRequest(sessionCookie, "1", `{"content": "Comment Content", "author": "3"}`)
 			response := httptest.NewRecorder()
 
 			server.ServeHTTP(response, request)
@@ -682,31 +626,18 @@ func TestPOSTComments(t *testing.T) {
 
 func TestPUTComments(t *testing.T) {
 	storage := &stubStorage{
-		posts: map[string]entities.Post{
-			"1": {
-				Id:        "1",
-				Title:     "Post 1",
-				Content:   "Post Content",
-				Author:    &entities.Customer{Id: "1"},
-				CreatedAt: newDate(2023, time.December, 4, 16, 30, 30, 100),
-			},
+		customers: map[string]stubCustomer{
+			"1": {"1", "alex", "Alex", "123"},
+			"2": {"2", "andre", "Andre", "123"},
+			"3": {"3", "john", "John", "123"},
 		},
-		comments: map[string]map[string]entities.Comment{
+		posts: map[string]stubPost{
+			"1": {"1", "Post 1", "Post Content", "1"},
+		},
+		comments: map[string]map[string]stubComment{
 			"1": {
-				"1": {
-					Id:        "1",
-					Post:      "1",
-					Content:   "Some comment",
-					Author:    &entities.Customer{Id: "2"},
-					CreatedAt: newDate(2024, time.January, 23, 12, 30, 30, 100),
-				},
-				"2": {
-					Id:        "2",
-					Post:      "1",
-					Content:   "Some comment",
-					Author:    &entities.Customer{Id: "3"},
-					CreatedAt: newDate(2024, time.January, 23, 12, 30, 30, 100),
-				},
+				"1": {"1", "1", "Some comment", "2"},
+				"2": {"2", "1", "Some comment", "3"},
 			},
 		},
 	}
@@ -772,30 +703,27 @@ func TestPUTComments(t *testing.T) {
 
 func TestDELETEComments(t *testing.T) {
 	storage := &stubStorage{
-		posts: map[string]entities.Post{
+		posts: map[string]stubPost{
 			"1": {
-				Id:        "1",
-				Title:     "Post 1",
-				Content:   "Post Content",
-				Author:    &entities.Customer{Id: "1"},
-				CreatedAt: newDate(2023, time.December, 4, 16, 30, 30, 100),
+				Id:      "1",
+				Title:   "Post 1",
+				Content: "Post Content",
+				Author:  "1",
 			},
 		},
-		comments: map[string]map[string]entities.Comment{
+		comments: map[string]map[string]stubComment{
 			"1": {
 				"1": {
-					Id:        "1",
-					Post:      "1",
-					Content:   "Some comment",
-					Author:    &entities.Customer{Id: "2"},
-					CreatedAt: newDate(2024, time.January, 23, 12, 30, 30, 100),
+					Id:      "1",
+					Post:    "1",
+					Content: "Some comment",
+					Author:  "2",
 				},
 				"2": {
-					Id:        "2",
-					Post:      "1",
-					Content:   "Some comment",
-					Author:    &entities.Customer{Id: "3"},
-					CreatedAt: newDate(2024, time.January, 23, 12, 30, 30, 100),
+					Id:      "2",
+					Post:    "1",
+					Content: "Some comment",
+					Author:  "3",
 				},
 			},
 		},
@@ -857,25 +785,11 @@ func TestPOSTCustomers(t *testing.T) {
 			t.Errorf("didn't creates the customer")
 		}
 
-		want := entities.Customer{
-			Id:   "1",
-			Tag:  "marie",
-			Name: "Marie",
-		}
+		want, _ := storage.GetCustomer("1")
 
 		got := getCustomerFromResponseModel(t, response.Body)
 
-		if got.Id != want.Id || got.Tag != want.Tag || got.Name != want.Name {
-			t.Errorf(
-				`did not get expected comment, got {Id="%s", Tag="%s", Name="%s"} want {Id="%s", Tag="%s", Name="%s"}`,
-				got.Id,
-				got.Tag,
-				got.Name,
-				want.Id,
-				want.Tag,
-				want.Name,
-			)
-		}
+		assertGotCustomer(t, got, *want)
 	})
 
 	t.Run("returns 400", func(t *testing.T) {
@@ -935,13 +849,12 @@ func TestPOSTCustomers(t *testing.T) {
 
 func TestGETCustomers(t *testing.T) {
 	storage := &stubStorage{
-		customers: map[string]entities.Customer{
+		customers: map[string]stubCustomer{
 			"1": {
-				Id:        "1",
-				Tag:       "john",
-				Name:      "John",
-				Password:  "123456",
-				CreatedAt: newDate(2024, time.April, 4, 11, 55, 0, 0),
+				Id:       "1",
+				Tag:      "john",
+				Name:     "John",
+				Password: "123456",
 			},
 		},
 	}
@@ -958,9 +871,9 @@ func TestGETCustomers(t *testing.T) {
 		assertStatus(t, response, http.StatusOK)
 
 		got := getCustomerFromResponseModel(t, response.Body)
-		want := storage.customers["1"]
+		want, _ := storage.GetCustomer("1")
 
-		assertGotCustomer(t, got, want)
+		assertGotCustomer(t, got, *want)
 	})
 
 	t.Run("returns 404 on nonexistent customer", func(t *testing.T) {
@@ -987,13 +900,12 @@ func TestGETCustomers(t *testing.T) {
 
 func TestPUTCustomers(t *testing.T) {
 	storage := &stubStorage{
-		customers: map[string]entities.Customer{
+		customers: map[string]stubCustomer{
 			"1": {
-				Id:        "1",
-				Tag:       "john",
-				Name:      "John",
-				Password:  "123456",
-				CreatedAt: newDate(2024, time.April, 4, 11, 55, 0, 0),
+				Id:       "1",
+				Tag:      "john",
+				Name:     "John",
+				Password: "123456",
 			},
 		},
 	}
@@ -1064,16 +976,16 @@ func TestPUTCustomers(t *testing.T) {
 
 func TestDELETECustomers(t *testing.T) {
 	storage := &stubStorage{
-		customers: map[string]entities.Customer{
+		customers: map[string]stubCustomer{
 			"1": {
-				Id:        "1",
-				Name:      "John",
-				CreatedAt: newDate(2024, time.April, 4, 11, 55, 0, 0),
+				Id:   "1",
+				Tag:  "john",
+				Name: "John",
 			},
 			"2": {
-				Id:        "2",
-				Name:      "Mary",
-				CreatedAt: newDate(2024, time.April, 4, 11, 55, 0, 0),
+				Id:   "2",
+				Tag:  "mary",
+				Name: "Mary",
 			},
 		},
 	}
@@ -1127,12 +1039,6 @@ func TestServerTimeout(t *testing.T) {
 
 		assertStatus(t, response, http.StatusRequestTimeout)
 	})
-}
-
-func newDate(year int, month time.Month, day, hour, min, sec, mlsec int) string {
-	d := time.Date(year, month, day, hour, min, sec, mlsec*1e6, time.UTC)
-	b, _ := d.MarshalText()
-	return string(b)
 }
 
 func newGetPostRequest(cookie *http.Cookie, id string) *http.Request {

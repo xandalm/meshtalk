@@ -10,13 +10,33 @@ import (
 	"strconv"
 	"strings"
 	"testing"
-	"time"
 )
 
+type stubCustomer struct {
+	Id       string
+	Tag      string
+	Name     string
+	Password string
+}
+
+type stubPost struct {
+	Id      string
+	Title   string
+	Content string
+	Author  string
+}
+
+type stubComment struct {
+	Post    string
+	Id      string
+	Content string
+	Author  string
+}
+
 type stubStorage struct {
-	customers         map[string]entities.Customer
-	posts             map[string]entities.Post
-	comments          map[string]map[string]entities.Comment
+	customers         map[string]stubCustomer
+	posts             map[string]stubPost
+	comments          map[string]map[string]stubComment
 	customerEditCalls []string
 	postEditCalls     []string
 	commentEditCalls  []string
@@ -24,9 +44,9 @@ type stubStorage struct {
 
 func NewStubStorage() *stubStorage {
 	return &stubStorage{
-		map[string]entities.Customer{},
-		map[string]entities.Post{},
-		map[string]map[string]entities.Comment{},
+		map[string]stubCustomer{},
+		map[string]stubPost{},
+		map[string]map[string]stubComment{},
 		[]string{},
 		[]string{},
 		[]string{},
@@ -38,41 +58,46 @@ func (s *stubStorage) GetPost(id string) (*entities.Post, error) {
 	if !ok {
 		return nil, nil
 	}
+	customer, _ := s.GetCustomer(found.Author)
 	return &entities.Post{
-		Id:        found.Id,
-		Title:     found.Title,
-		Content:   found.Content,
-		Author:    found.Author,
-		CreatedAt: found.CreatedAt,
-		UpdatedAt: found.UpdatedAt,
-		DeletedAt: found.DeletedAt,
+		Id:      found.Id,
+		Title:   found.Title,
+		Content: found.Content,
+		Author:  *customer,
 	}, nil
 }
 
 func (s *stubStorage) GetPosts() ([]entities.Post, error) {
 	posts := make([]entities.Post, 0, len(s.posts))
 	for _, post := range s.posts {
-		posts = append(posts, post)
+		customer, _ := s.GetCustomer(post.Author)
+		posts = append(posts, entities.Post{
+			Id:      post.Id,
+			Title:   post.Title,
+			Content: post.Content,
+			Author:  *customer,
+		})
 	}
 	return posts, nil
 }
 
 func (s *stubStorage) CreatePost(post *entities.Post) error {
-	if post.Title == "" || post.Content == "" || post.Author == nil {
+	if post.Title == "" || post.Content == "" || post.Author.Id == "" {
 		return storage.ErrMissingPostFields
 	}
 	if _, ok := s.customers[post.Author.Id]; !ok {
 		return storage.ErrUnrecognizedAuthor
 	}
 	post.Id = strconv.Itoa(len(s.posts) + 1)
-	post.CreatedAt = timeToString(time.Now())
-	s.posts[post.Id] = *post
+	s.posts[post.Id] = stubPost{
+		Id:      post.Id,
+		Title:   post.Title,
+		Content: post.Content,
+		Author:  post.Author.Id,
+	}
+	customer, _ := s.GetCustomer(post.Author.Id)
+	post.Author = *customer
 	return nil
-}
-
-func timeToString(t time.Time) string {
-	b, _ := t.UTC().MarshalText()
-	return string(b)
 }
 
 func (s *stubStorage) EditPost(edit entities.PostInEditting) (*entities.Post, error) {
@@ -102,18 +127,28 @@ func (s *stubStorage) DeletePost(id string) error {
 func (s *stubStorage) GetComments(post string) ([]entities.Comment, error) {
 	var res []entities.Comment
 
+	fn := func(c stubComment) entities.Comment {
+		customer, _ := s.GetCustomer(c.Author)
+		return entities.Comment{
+			Post:    c.Post,
+			Id:      c.Id,
+			Content: c.Content,
+			Author:  *customer,
+		}
+	}
+
 	if post != "" {
 		found, ok := s.comments[post]
 		if !ok {
 			return nil, storage.ErrPostNotFound
 		}
 		for _, comment := range found {
-			res = append(res, comment)
+			res = append(res, fn(comment))
 		}
 	} else {
 		for _, comments := range s.comments {
 			for _, comment := range comments {
-				res = append(res, comment)
+				res = append(res, fn(comment))
 			}
 		}
 	}
@@ -122,24 +157,22 @@ func (s *stubStorage) GetComments(post string) ([]entities.Comment, error) {
 }
 
 func (s *stubStorage) GetComment(post, id string) (*entities.Comment, error) {
-	var found entities.Comment
+	var found stubComment
 	found, ok := s.comments[post][id]
 	if !ok {
 		return nil, nil
 	}
+	customer, _ := s.GetCustomer(found.Author)
 	return &entities.Comment{
-		Id:        found.Id,
-		Post:      found.Post,
-		Content:   found.Content,
-		Author:    found.Author,
-		CreatedAt: found.CreatedAt,
-		UpdatedAt: found.UpdatedAt,
-		DeletedAt: found.DeletedAt,
+		Id:      found.Id,
+		Post:    found.Post,
+		Content: found.Content,
+		Author:  *customer,
 	}, nil
 }
 
 func (s *stubStorage) CreateComment(comment *entities.Comment) error {
-	if comment.Author == nil || comment.Content == "" {
+	if comment.Author.Id == "" || comment.Content == "" {
 		return storage.ErrMissingCommentFields
 	}
 	if _, hasPost := s.posts[comment.Post]; !hasPost {
@@ -150,11 +183,17 @@ func (s *stubStorage) CreateComment(comment *entities.Comment) error {
 	}
 	_, hasComments := s.comments[comment.Post]
 	if !hasComments {
-		s.comments[comment.Post] = make(map[string]entities.Comment)
+		s.comments[comment.Post] = make(map[string]stubComment)
 	}
 	comment.Id = strconv.Itoa(len(s.comments[comment.Post]) + 1)
-	comment.CreatedAt = timeToString(time.Now())
-	s.comments[comment.Post][comment.Id] = *comment
+	s.comments[comment.Post][comment.Id] = stubComment{
+		Post:    comment.Post,
+		Id:      comment.Id,
+		Content: comment.Content,
+		Author:  comment.Author.Id,
+	}
+	customer, _ := s.GetCustomer(comment.Author.Id)
+	comment.Author = *customer
 	return nil
 }
 
@@ -192,8 +231,12 @@ func (s *stubStorage) CreateCustomer(customer *entities.Customer) error {
 		return storage.ErrMissingCustomerFields
 	}
 	customer.Id = strconv.Itoa(len(s.customers) + 1)
-	customer.CreatedAt = timeToString(time.Now())
-	s.customers[customer.Id] = *customer
+	s.customers[customer.Id] = stubCustomer{
+		Id:       customer.Id,
+		Tag:      customer.Tag,
+		Name:     customer.Name,
+		Password: customer.Password,
+	}
 	return nil
 }
 
@@ -203,13 +246,10 @@ func (s *stubStorage) GetCustomer(id string) (*entities.Customer, error) {
 		return nil, nil
 	}
 	return &entities.Customer{
-		Id:        found.Id,
-		Tag:       found.Tag,
-		Name:      found.Name,
-		Password:  found.Password,
-		CreatedAt: found.CreatedAt,
-		UpdatedAt: found.UpdatedAt,
-		DeletedAt: found.DeletedAt,
+		Id:       found.Id,
+		Tag:      found.Tag,
+		Name:     found.Name,
+		Password: found.Password,
 	}, nil
 }
 
@@ -242,7 +282,7 @@ func (s *stubStorage) DeleteCustomer(id string) error {
 var errFoo = errors.New("some error")
 
 type stubFailingStorage struct {
-	posts map[string]entities.Post
+	posts map[string]stubPost
 }
 
 func (s *stubFailingStorage) GetPost(id string) (*entities.Post, error) {
