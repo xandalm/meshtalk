@@ -794,25 +794,18 @@ func TestDELETEComments(t *testing.T) {
 }
 
 func TestPOSTCustomers(t *testing.T) {
-	storage := &stubStorage{
-		tags: map[string]string{"alex": "1"},
-		customers: map[string]stubCustomer{
-			"1": {"1", "alex", "Alex", ""},
-		},
-	}
+	storage := NewStubStorage()
 	server := NewServer(storage)
 
-	sessionCookie := login(t, server, "alex", "")
-
 	t.Run("returns 201 and customer", func(t *testing.T) {
-		request := newCreateCustomerRequest(sessionCookie, `{"tag": "marie", "name": "Marie", "password": "123456"}`)
+		request := newCreateCustomerRequest(`{"tag": "marie", "name": "Marie", "password": "123456"}`)
 		response := httptest.NewRecorder()
 
 		server.ServeHTTP(response, request)
 
 		assertStatus(t, response, http.StatusCreated)
 
-		want, _ := storage.GetCustomer("2")
+		want, _ := storage.GetCustomer("1")
 
 		got := getCustomerFromResponseModel(t, response.Body)
 
@@ -821,7 +814,7 @@ func TestPOSTCustomers(t *testing.T) {
 
 	t.Run("returns 400", func(t *testing.T) {
 		t.Run("unsupported error", func(t *testing.T) {
-			request := newCreateCustomerRequest(sessionCookie, `data`)
+			request := newCreateCustomerRequest(`data`)
 			response := httptest.NewRecorder()
 
 			server.ServeHTTP(response, request)
@@ -847,7 +840,7 @@ func TestPOSTCustomers(t *testing.T) {
 			}
 
 			for _, raw := range cases {
-				request := newCreateCustomerRequest(sessionCookie, raw)
+				request := newCreateCustomerRequest(raw)
 				response := httptest.NewRecorder()
 
 				server.ServeHTTP(response, request)
@@ -862,10 +855,27 @@ func TestPOSTCustomers(t *testing.T) {
 		})
 	})
 
+	t.Run("returns 401 because it already is an logged user", func(t *testing.T) {
+		server := NewServer(&stubStorage{
+			tags: map[string]string{"alex": "1"},
+			customers: map[string]stubCustomer{
+				"1": {"1", "alex", "Alex", ""},
+			},
+		})
+
+		request := newCreateCustomerRequest(`{"tag": "marie", "name": "Marie", "password": "123456"}`)
+		request.AddCookie(login(t, server, "alex", ""))
+		response := httptest.NewRecorder()
+
+		server.ServeHTTP(response, request)
+
+		assertStatus(t, response, http.StatusUnauthorized)
+	})
+
 	t.Run("returns 500 on unexpected error", func(t *testing.T) {
 		server := NewServer(&stubFailingStorage{})
 
-		request := newCreateCustomerRequest(sessionCookie, `{"tag": "marie", "name": "Marie", "password": "123456"}`)
+		request := newCreateCustomerRequest(`{"tag": "marie", "name": "Marie", "password": "123456"}`)
 		response := httptest.NewRecorder()
 
 		server.ServeHTTP(response, request)
@@ -969,13 +979,13 @@ func TestPUTCustomers(t *testing.T) {
 		}
 	})
 
-	t.Run("returns 404 on nonexistent customer", func(t *testing.T) {
+	t.Run("returns 401 because id doesn't match the stored in the session", func(t *testing.T) {
 		request := newEditCustomerRequest(sessionCookie, "2", `{"name": "Marie"}`)
 		response := httptest.NewRecorder()
 
 		server.ServeHTTP(response, request)
 
-		assertStatus(t, response, http.StatusNotFound)
+		assertStatus(t, response, http.StatusUnauthorized)
 
 	})
 
@@ -1023,15 +1033,24 @@ func TestDELETECustomers(t *testing.T) {
 
 	sessionCookie := login(t, server, "john", "")
 
-	t.Run("returns 204", func(t *testing.T) {
+	t.Run("returns 401", func(t *testing.T) {
 		request := newDeleteCustomerRequest(sessionCookie, "2")
+		response := httptest.NewRecorder()
+
+		server.ServeHTTP(response, request)
+
+		assertStatus(t, response, http.StatusUnauthorized)
+	})
+
+	t.Run("returns 204", func(t *testing.T) {
+		request := newDeleteCustomerRequest(sessionCookie, "1")
 		response := httptest.NewRecorder()
 
 		server.ServeHTTP(response, request)
 
 		assertStatus(t, response, http.StatusNoContent)
 
-		if _, ok := storage.customers["2"]; ok {
+		if _, ok := storage.customers["1"]; ok {
 			t.Errorf("didn't delete customer")
 		}
 	})
@@ -1141,9 +1160,8 @@ func newDeleteCommentRequest(cookie *http.Cookie, postId, commentId string) *htt
 	return req
 }
 
-func newCreateCustomerRequest(cookie *http.Cookie, jsonRaw string) *http.Request {
+func newCreateCustomerRequest(jsonRaw string) *http.Request {
 	req, _ := http.NewRequest(http.MethodPost, "/customers", strings.NewReader(jsonRaw))
-	req.AddCookie(cookie)
 	return req
 }
 
