@@ -34,6 +34,7 @@ type stubComment struct {
 }
 
 type stubStorage struct {
+	tags              map[string]string
 	customers         map[string]stubCustomer
 	posts             map[string]stubPost
 	comments          map[string]map[string]stubComment
@@ -44,6 +45,7 @@ type stubStorage struct {
 
 func NewStubStorage() *stubStorage {
 	return &stubStorage{
+		map[string]string{},
 		map[string]stubCustomer{},
 		map[string]stubPost{},
 		map[string]map[string]stubComment{},
@@ -253,6 +255,19 @@ func (s *stubStorage) GetCustomer(id string) (*entities.Customer, error) {
 	}, nil
 }
 
+func (s *stubStorage) GetCustomerByTag(tag string) (*entities.Customer, error) {
+	found, ok := s.customers[s.tags[tag]]
+	if !ok {
+		return nil, nil
+	}
+	return &entities.Customer{
+		Id:       found.Id,
+		Tag:      found.Tag,
+		Name:     found.Name,
+		Password: found.Password,
+	}, nil
+}
+
 func (s *stubStorage) EditCustomer(edit entities.CustomerInEditting) (*entities.Customer, error) {
 	if _, ok := s.customers[edit.Id]; !ok {
 		return nil, storage.ErrCustomerNotFound
@@ -333,6 +348,10 @@ func (s *stubFailingStorage) GetCustomer(id string) (*entities.Customer, error) 
 	return nil, errFoo
 }
 
+func (s *stubFailingStorage) GetCustomerByTag(tag string) (*entities.Customer, error) {
+	return nil, errFoo
+}
+
 func (s *stubFailingStorage) EditCustomer(edit entities.CustomerInEditting) (*entities.Customer, error) {
 	return nil, errFoo
 }
@@ -342,20 +361,21 @@ func (s *stubFailingStorage) DeleteCustomer(id string) error {
 }
 
 type mockStorage struct {
-	GetPostFunc        func(id string) (*entities.Post, error)
-	GetPostsFunc       func() ([]entities.Post, error)
-	CreatePostFunc     func(post *entities.Post) error
-	EditPostFunc       func(edit entities.PostInEditting) (*entities.Post, error)
-	DeletePostFunc     func(id string) error
-	GetCommentsFunc    func(post string) ([]entities.Comment, error)
-	GetCommentFunc     func(post, id string) (*entities.Comment, error)
-	CreateCommentFunc  func(comment *entities.Comment) error
-	EditCommentFunc    func(edit entities.CommentInEditting) (*entities.Comment, error)
-	DeleteCommentFunc  func(post, id string) error
-	CreateCustomerFunc func(customer *entities.Customer) error
-	GetCustomerFunc    func(id string) (*entities.Customer, error)
-	EditCustomerFunc   func(edit entities.CustomerInEditting) (*entities.Customer, error)
-	DeleteCustomerFunc func(id string) error
+	GetPostFunc          func(id string) (*entities.Post, error)
+	GetPostsFunc         func() ([]entities.Post, error)
+	CreatePostFunc       func(post *entities.Post) error
+	EditPostFunc         func(edit entities.PostInEditting) (*entities.Post, error)
+	DeletePostFunc       func(id string) error
+	GetCommentsFunc      func(post string) ([]entities.Comment, error)
+	GetCommentFunc       func(post, id string) (*entities.Comment, error)
+	CreateCommentFunc    func(comment *entities.Comment) error
+	EditCommentFunc      func(edit entities.CommentInEditting) (*entities.Comment, error)
+	DeleteCommentFunc    func(post, id string) error
+	CreateCustomerFunc   func(customer *entities.Customer) error
+	GetCustomerFunc      func(id string) (*entities.Customer, error)
+	GetCustomerByTagFunc func(tag string) (*entities.Customer, error)
+	EditCustomerFunc     func(edit entities.CustomerInEditting) (*entities.Customer, error)
+	DeleteCustomerFunc   func(id string) error
 }
 
 func (s *mockStorage) GetPost(id string) (*entities.Post, error) {
@@ -404,6 +424,10 @@ func (s *mockStorage) CreateCustomer(customer *entities.Customer) error {
 
 func (s *mockStorage) GetCustomer(id string) (*entities.Customer, error) {
 	return s.GetCustomerFunc(id)
+}
+
+func (s *mockStorage) GetCustomerByTag(tag string) (*entities.Customer, error) {
+	return s.GetCustomerByTagFunc(tag)
 }
 
 func (s *mockStorage) EditCustomer(edit entities.CustomerInEditting) (*entities.Customer, error) {

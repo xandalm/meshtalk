@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io"
 	"meshtalk/domain/entities"
 	"net/http"
@@ -46,8 +47,12 @@ func getSessionCookie(response *httptest.ResponseRecorder) (*http.Cookie, error)
 	return sessionCookie, nil
 }
 
-func login(t *testing.T, server *Server) *http.Cookie {
-	request, _ := http.NewRequest(http.MethodPost, "/login", nil)
+func login(t *testing.T, server *Server, tag, password string) *http.Cookie {
+	request, _ := http.NewRequest(
+		http.MethodPost,
+		"/login",
+		strings.NewReader(fmt.Sprintf(`{"tag": %q, "password": %q}`, tag, password)),
+	)
 	response := httptest.NewRecorder()
 	server.ServeHTTP(response, request)
 
@@ -61,6 +66,7 @@ func login(t *testing.T, server *Server) *http.Cookie {
 
 func TestGETPosts(t *testing.T) {
 	storage := &stubStorage{
+		tags: map[string]string{"alex": "1", "andre": "2"},
 		customers: map[string]stubCustomer{
 			"1": {
 				Id:       "1",
@@ -92,7 +98,7 @@ func TestGETPosts(t *testing.T) {
 	}
 	server := NewServer(storage)
 
-	sessionCookie := login(t, server)
+	sessionCookie := login(t, server, "alex", "123456")
 
 	t.Run("returns post with id equal to 1", func(t *testing.T) {
 
@@ -171,6 +177,7 @@ func TestGETPosts(t *testing.T) {
 
 func TestPOSTPosts(t *testing.T) {
 	storage := &stubStorage{
+		tags: map[string]string{"alex": "1"},
 		customers: map[string]stubCustomer{
 			"1": {
 				Id:   "1",
@@ -182,7 +189,7 @@ func TestPOSTPosts(t *testing.T) {
 	}
 	server := NewServer(storage)
 
-	sessionCookie := login(t, server)
+	sessionCookie := login(t, server, "alex", "")
 
 	t.Run(`returns 201 and post after create post`, func(t *testing.T) {
 		request := newCreatePostRequest(sessionCookie, `{"title": "Post X", "content": "Post Content", "author": "1"}`)
@@ -259,6 +266,7 @@ func TestPOSTPosts(t *testing.T) {
 
 func TestPUTPosts(t *testing.T) {
 	storage := &stubStorage{
+		tags: map[string]string{"alex": "1", "andre": "2"},
 		customers: map[string]stubCustomer{
 			"1": {"1", "alex", "Alex", "123"},
 			"2": {"2", "andre", "Andre", "123"},
@@ -270,7 +278,7 @@ func TestPUTPosts(t *testing.T) {
 	}
 	server := NewServer(storage)
 
-	sessionCookie := login(t, server)
+	sessionCookie := login(t, server, "alex", "123")
 
 	t.Run("returns 204 on post edited", func(t *testing.T) {
 		request := newEditPostRequest(sessionCookie, "1", `{"Content": "Edited Content"}`)
@@ -327,13 +335,17 @@ func TestPUTPosts(t *testing.T) {
 func TestDELETEPosts(t *testing.T) {
 	t.Run("returns 200 on post deleted", func(t *testing.T) {
 		storage := &stubStorage{
+			tags: map[string]string{"alex": "1"},
+			customers: map[string]stubCustomer{
+				"1": {"1", "alex", "Alex", ""},
+			},
 			posts: map[string]stubPost{
 				"1": {"1", "Post 1", "Post Content", "1"},
 			},
 		}
 		server := NewServer(storage)
 
-		sessionCookie := login(t, server)
+		sessionCookie := login(t, server, "alex", "")
 
 		request := newDeletePostRequest(sessionCookie, "1")
 		response := httptest.NewRecorder()
@@ -346,10 +358,17 @@ func TestDELETEPosts(t *testing.T) {
 		}
 	})
 	t.Run("returns 500 on unexpected error", func(t *testing.T) {
-		storage := &stubFailingStorage{}
+		storage := &mockStorage{
+			GetCustomerByTagFunc: func(tag string) (*entities.Customer, error) {
+				return &entities.Customer{}, nil
+			},
+			DeletePostFunc: func(id string) error {
+				return errFoo
+			},
+		}
 		server := NewServer(storage)
 
-		sessionCookie := login(t, server)
+		sessionCookie := login(t, server, "", "")
 
 		request := newDeletePostRequest(sessionCookie, "1")
 		response := httptest.NewRecorder()
@@ -362,6 +381,7 @@ func TestDELETEPosts(t *testing.T) {
 
 func TestGETComments(t *testing.T) {
 	storage := &stubStorage{
+		tags: map[string]string{"alex": "1", "john": "2"},
 		customers: map[string]stubCustomer{
 			"1": {"1", "alex", "Alex", ""},
 			"2": {"1", "john", "John", ""},
@@ -382,7 +402,7 @@ func TestGETComments(t *testing.T) {
 	}
 	server := NewServer(storage)
 
-	sessionCookie := login(t, server)
+	sessionCookie := login(t, server, "alex", "")
 
 	t.Run("returns comments from post 1", func(t *testing.T) {
 
@@ -513,6 +533,7 @@ func TestGETComments(t *testing.T) {
 
 func TestPOSTComments(t *testing.T) {
 	storage := &stubStorage{
+		tags: map[string]string{"alex": "1", "andre": "2"},
 		customers: map[string]stubCustomer{
 			"1": {
 				Id:   "1",
@@ -533,7 +554,7 @@ func TestPOSTComments(t *testing.T) {
 	}
 	server := NewServer(storage)
 
-	sessionCookie := login(t, server)
+	sessionCookie := login(t, server, "alex", "")
 
 	t.Run(`returns 201 and comment after create comment`, func(t *testing.T) {
 		request := newCreateCommentRequest(sessionCookie, "1", `{"content": "Comment Content", "author": "1"}`)
@@ -626,10 +647,11 @@ func TestPOSTComments(t *testing.T) {
 
 func TestPUTComments(t *testing.T) {
 	storage := &stubStorage{
+		tags: map[string]string{"alex": "1", "andre": "2", "john": "3"},
 		customers: map[string]stubCustomer{
-			"1": {"1", "alex", "Alex", "123"},
-			"2": {"2", "andre", "Andre", "123"},
-			"3": {"3", "john", "John", "123"},
+			"1": {"1", "alex", "Alex", ""},
+			"2": {"2", "andre", "Andre", ""},
+			"3": {"3", "john", "John", ""},
 		},
 		posts: map[string]stubPost{
 			"1": {"1", "Post 1", "Post Content", "1"},
@@ -643,7 +665,7 @@ func TestPUTComments(t *testing.T) {
 	}
 	server := NewServer(storage)
 
-	sessionCookie := login(t, server)
+	sessionCookie := login(t, server, "alex", "")
 
 	t.Run("returns 204", func(t *testing.T) {
 		request := newEditCommentRequest(sessionCookie, "1", "1", `{"Content": "Edited Content"}`)
@@ -703,6 +725,10 @@ func TestPUTComments(t *testing.T) {
 
 func TestDELETEComments(t *testing.T) {
 	storage := &stubStorage{
+		tags: map[string]string{"alex": "1"},
+		customers: map[string]stubCustomer{
+			"1": {"1", "alex", "Alex", ""},
+		},
 		posts: map[string]stubPost{
 			"1": {
 				Id:      "1",
@@ -730,7 +756,7 @@ func TestDELETEComments(t *testing.T) {
 	}
 	server := NewServer(storage)
 
-	sessionCookie := login(t, server)
+	sessionCookie := login(t, server, "alex", "")
 
 	t.Run("returns 204", func(t *testing.T) {
 		request := newDeleteCommentRequest(sessionCookie, "1", "2")
@@ -768,10 +794,15 @@ func TestDELETEComments(t *testing.T) {
 }
 
 func TestPOSTCustomers(t *testing.T) {
-	storage := NewStubStorage()
+	storage := &stubStorage{
+		tags: map[string]string{"alex": "1"},
+		customers: map[string]stubCustomer{
+			"1": {"1", "alex", "Alex", ""},
+		},
+	}
 	server := NewServer(storage)
 
-	sessionCookie := login(t, server)
+	sessionCookie := login(t, server, "alex", "")
 
 	t.Run("returns 201 and customer", func(t *testing.T) {
 		request := newCreateCustomerRequest(sessionCookie, `{"tag": "marie", "name": "Marie", "password": "123456"}`)
@@ -781,11 +812,7 @@ func TestPOSTCustomers(t *testing.T) {
 
 		assertStatus(t, response, http.StatusCreated)
 
-		if _, ok := storage.customers["1"]; !ok {
-			t.Errorf("didn't creates the customer")
-		}
-
-		want, _ := storage.GetCustomer("1")
+		want, _ := storage.GetCustomer("2")
 
 		got := getCustomerFromResponseModel(t, response.Body)
 
@@ -849,6 +876,7 @@ func TestPOSTCustomers(t *testing.T) {
 
 func TestGETCustomers(t *testing.T) {
 	storage := &stubStorage{
+		tags: map[string]string{"john": "1"},
 		customers: map[string]stubCustomer{
 			"1": {
 				Id:       "1",
@@ -860,7 +888,7 @@ func TestGETCustomers(t *testing.T) {
 	}
 	server := NewServer(storage)
 
-	sessionCookie := login(t, server)
+	sessionCookie := login(t, server, "john", "123456")
 
 	t.Run("returns 200 and the customer data", func(t *testing.T) {
 		request := newGetCustomerRequest(sessionCookie, "1")
@@ -900,6 +928,7 @@ func TestGETCustomers(t *testing.T) {
 
 func TestPUTCustomers(t *testing.T) {
 	storage := &stubStorage{
+		tags: map[string]string{"john": "1"},
 		customers: map[string]stubCustomer{
 			"1": {
 				Id:       "1",
@@ -911,7 +940,7 @@ func TestPUTCustomers(t *testing.T) {
 	}
 	server := NewServer(storage)
 
-	sessionCookie := login(t, server)
+	sessionCookie := login(t, server, "john", "123456")
 
 	t.Run("returns 204", func(t *testing.T) {
 		cases := []struct {
@@ -976,6 +1005,7 @@ func TestPUTCustomers(t *testing.T) {
 
 func TestDELETECustomers(t *testing.T) {
 	storage := &stubStorage{
+		tags: map[string]string{"john": "1", "mary": "2"},
 		customers: map[string]stubCustomer{
 			"1": {
 				Id:   "1",
@@ -991,7 +1021,7 @@ func TestDELETECustomers(t *testing.T) {
 	}
 	server := NewServer(storage)
 
-	sessionCookie := login(t, server)
+	sessionCookie := login(t, server, "john", "")
 
 	t.Run("returns 204", func(t *testing.T) {
 		request := newDeleteCustomerRequest(sessionCookie, "2")
@@ -1022,6 +1052,11 @@ func TestDELETECustomers(t *testing.T) {
 func TestServerTimeout(t *testing.T) {
 	t.Run("returns 408 when reaches server timeout", func(t *testing.T) {
 		storage := &mockStorage{
+			GetCustomerByTagFunc: func(tag string) (*entities.Customer, error) {
+				return &entities.Customer{
+					Tag: "alex",
+				}, nil
+			},
 			GetPostFunc: func(id string) (*entities.Post, error) {
 				time.Sleep(time.Second * 2)
 				return &entities.Post{}, nil
@@ -1030,7 +1065,7 @@ func TestServerTimeout(t *testing.T) {
 		server := NewServer(storage)
 		server.SetTimeout(time.Second * 1)
 
-		sessionCookie := login(t, server)
+		sessionCookie := login(t, server, "alex", "")
 
 		request := newGetPostRequest(sessionCookie, "1")
 		response := httptest.NewRecorder()

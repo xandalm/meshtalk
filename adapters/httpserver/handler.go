@@ -217,13 +217,31 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) hasPermission(sess session.Session) bool {
-	logged, ok := sess.Get("logged").(bool)
-	return ok && logged
+	customer := sess.Get("customer")
+	return customer != nil
 }
 
 func (s *Server) login(w router.ResponseWriter, r *router.Request) {
 	session := s.sessionManager.StartSession(w, r.Request)
-	if err := session.Set("logged", true); err != nil {
+
+	var credentials struct {
+		Tag      string `json:"tag"`
+		Password string `json:"password"`
+	}
+
+	r.ParseBodyInto(&credentials)
+
+	customer, err := s.storage.GetCustomerByTag(credentials.Tag)
+	if err != nil {
+		s.writeResponseModelWithError(w, err)
+		return
+	}
+	if customer == nil || customer.Password != credentials.Password {
+		w.WriteHeader(http.StatusForbidden)
+		return
+	}
+
+	if err := session.Set("customer", *customer); err != nil {
 		w.WriteHeader(http.StatusInternalServerError)
 	}
 }

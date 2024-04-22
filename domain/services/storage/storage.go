@@ -29,6 +29,11 @@ type Storage interface {
 	// In case of error, this error is uncategorized for storage interface.
 	GetCustomer(id string) (*entities.Customer, error)
 
+	// Get customer data by tag.
+	//
+	// In case of error, this error is uncategorized for storage interface.
+	GetCustomerByTag(tag string) (*entities.Customer, error)
+
 	// Update customer data.
 	//
 	// In case of error, it's expected to return one of the errors:
