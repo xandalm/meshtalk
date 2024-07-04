@@ -65,7 +65,7 @@ func (s *stubStorage) GetPost(id string) (*entities.Post, error) {
 		Id:      found.Id,
 		Title:   found.Title,
 		Content: found.Content,
-		Author:  *customer,
+		Author:  customer,
 	}, nil
 }
 
@@ -77,7 +77,7 @@ func (s *stubStorage) GetPosts() ([]entities.Post, error) {
 			Id:      post.Id,
 			Title:   post.Title,
 			Content: post.Content,
-			Author:  *customer,
+			Author:  customer,
 		})
 	}
 	return posts, nil
@@ -98,7 +98,7 @@ func (s *stubStorage) CreatePost(post *entities.Post) error {
 		Author:  post.Author.Id,
 	}
 	customer, _ := s.GetCustomer(post.Author.Id)
-	post.Author = *customer
+	post.Author = customer
 	return nil
 }
 
@@ -135,7 +135,7 @@ func (s *stubStorage) GetComments(post string) ([]entities.Comment, error) {
 			Post:    c.Post,
 			Id:      c.Id,
 			Content: c.Content,
-			Author:  *customer,
+			Author:  customer,
 		}
 	}
 
@@ -169,7 +169,7 @@ func (s *stubStorage) GetComment(post, id string) (*entities.Comment, error) {
 		Id:      found.Id,
 		Post:    found.Post,
 		Content: found.Content,
-		Author:  *customer,
+		Author:  customer,
 	}, nil
 }
 
@@ -195,7 +195,7 @@ func (s *stubStorage) CreateComment(comment *entities.Comment) error {
 		Author:  comment.Author.Id,
 	}
 	customer, _ := s.GetCustomer(comment.Author.Id)
-	comment.Author = *customer
+	comment.Author = customer
 	return nil
 }
 

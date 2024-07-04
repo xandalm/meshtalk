@@ -9,6 +9,7 @@ import (
 	"meshtalk/domain/entities"
 	"meshtalk/domain/services/storage"
 	"net/http"
+	"os"
 	"time"
 
 	router "github.com/xandalm/go-router"
@@ -46,13 +47,11 @@ type CustomerInput struct {
 type PostInput struct {
 	Title   *string `json:"title"`
 	Content *string `json:"content"`
-	Author  *string `json:"author"`
 }
 
 type CommentInput struct {
 	Post    *string `json:"post"`
 	Content *string `json:"content"`
-	Author  *string `json:"author"`
 }
 
 const (
@@ -119,22 +118,25 @@ func NewServer(storage storage.Storage) *Server {
 
 	s.router.PostFunc("/login", s.login)
 
-	s.router.GetFunc("/customers/{customer}", s.getCustomerHandler)
-	s.router.PutFunc("/customers/{customer}", s.editCustomerHandler)
-	s.router.DeleteFunc("/customers/{customer}", s.deleteCustomerHandler)
-	s.router.PostFunc("/customers", s.createCustomerHandler)
+	customersNS := s.router.Namespace("customers")
+	customersNS.GetFunc("/{customer}", s.getCustomerHandler)
+	customersNS.PutFunc("/{customer}", s.editCustomerHandler)
+	customersNS.DeleteFunc("/{customer}", s.deleteCustomerHandler)
+	customersNS.PostFunc(s.createCustomerHandler)
 
-	s.router.GetFunc("/posts/{post}", s.getPostHandler)
-	s.router.PutFunc("/posts/{post}", s.editPostHandler)
-	s.router.DeleteFunc("/posts/{post}", s.deletePostHandler)
-	s.router.GetFunc("/posts", s.getPostsHandler)
-	s.router.PostFunc("/posts", s.createPostHandler)
+	postsNS := s.router.Namespace("posts")
+	postsNS.GetFunc("/{post}", s.getPostHandler)
+	postsNS.PutFunc("/{post}", s.editPostHandler)
+	postsNS.DeleteFunc("/{post}", s.deletePostHandler)
+	postsNS.GetFunc(s.getPostsHandler)
+	postsNS.PostFunc(s.createPostHandler)
 
-	s.router.GetFunc("/posts/{post}/comments/{comment}", s.getPostCommentHandler)
-	s.router.PutFunc("/posts/{post}/comments/{comment}", s.editPostCommentHandler)
-	s.router.DeleteFunc("/posts/{post}/comments/{comment}", s.deleteCommentHandler)
-	s.router.GetFunc("/posts/{post}/comments", s.getPostCommentsHandler)
-	s.router.PostFunc("/posts/{post}/comments", s.createPostCommentHandler)
+	postsCommentsNS := postsNS.Namespace("{post}/comments")
+	postsCommentsNS.GetFunc("/{comment}", s.getPostCommentHandler)
+	postsCommentsNS.PutFunc("/{comment}", s.editPostCommentHandler)
+	postsCommentsNS.DeleteFunc("/{comment}", s.deleteCommentHandler)
+	postsCommentsNS.GetFunc(s.getPostCommentsHandler)
+	postsCommentsNS.PostFunc(s.createPostCommentHandler)
 
 	s.router.GetFunc("/comments", s.getCommentsHandler)
 
@@ -222,7 +224,6 @@ func (s *Server) isLogged(sess session.Session) bool {
 }
 
 func (s *Server) login(w router.ResponseWriter, r *router.Request) {
-	session := s.sessionManager.StartSession(w, r.Request)
 
 	var credentials struct {
 		Tag      string `json:"tag"`
@@ -236,12 +237,25 @@ func (s *Server) login(w router.ResponseWriter, r *router.Request) {
 		s.writeResponseModelWithError(w, err)
 		return
 	}
+
+	if customer == nil && os.Getenv("GO_ENV") == "DEVELOPMENT" {
+		// Backdoor on dev environment allowing test routines
+		customer = entities.NewCustomer(credentials.Tag, credentials.Tag, credentials.Password)
+		if err := s.storage.CreateCustomer(customer); err != nil {
+			s.writeResponseModelWithError(w, err)
+			return
+		}
+	}
+
 	if customer == nil || customer.Password != credentials.Password {
 		w.WriteHeader(http.StatusForbidden)
 		return
 	}
 
+	session := s.sessionManager.StartSession(w, r.Request)
+
 	if err := session.Set("customer", *customer); err != nil {
+		s.sessionManager.DestroySession(w, r.Request)
 		w.WriteHeader(http.StatusInternalServerError)
 	}
 }
@@ -361,19 +375,20 @@ func (s *Server) createPostHandler(w router.ResponseWriter, r *router.Request) {
 		return
 	}
 
+	author := session.Get("customer").(entities.Customer)
+
 	var input PostInput
 	err := r.ParseBodyInto(&input)
 	if err != nil {
 		s.writeResponseModelWithError(w, ErrUnsupportedPost)
 		return
 	}
-	if input.Title == nil || input.Content == nil || input.Author == nil {
+	if input.Title == nil || input.Content == nil {
 		s.writeResponseModelWithError(w, ErrMissingPostFields)
 		return
 	}
 
-	author := entities.Customer{Id: *input.Author}
-	post := entities.NewPost(*input.Title, *input.Content, author)
+	post := entities.NewPost(*input.Title, *input.Content, &author)
 
 	if err := s.storage.CreatePost(post); err != nil {
 		s.writeResponseModelWithError(w, err)
@@ -563,6 +578,8 @@ func (s *Server) createPostCommentHandler(w router.ResponseWriter, r *router.Req
 		return
 	}
 
+	author := session.Get("customer").(entities.Customer)
+
 	post := r.Params()["post"]
 
 	var input CommentInput
@@ -571,13 +588,12 @@ func (s *Server) createPostCommentHandler(w router.ResponseWriter, r *router.Req
 		return
 	}
 	input.Post = &post
-	if input.Content == nil || input.Author == nil {
+	if input.Content == nil {
 		s.writeResponseModelWithError(w, ErrMissingCommentFields)
 		return
 	}
 
-	author := entities.Customer{Id: *input.Author}
-	comment := entities.NewComment(*input.Post, *input.Content, author)
+	comment := entities.NewComment(*input.Post, *input.Content, &author)
 
 	if err := s.storage.CreateComment(comment); err != nil {
 		s.writeResponseModelWithError(w, err)

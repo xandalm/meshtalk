@@ -2,7 +2,6 @@ package specifications
 
 import (
 	"encoding/json"
-	"fmt"
 	"meshtalk/adapters/httpserver"
 	"net/http"
 	"reflect"
@@ -11,26 +10,33 @@ import (
 )
 
 type CreatePostAction interface {
+	BeConnected(args ...string) error
 	CreatePost(args ...string) (int, string, error)
 }
 
 type ReadingPostAction interface {
+	BeConnected(args ...string) error
 	ReadPost(id string) (int, string, error)
 }
 
 var keepingPostId string
 
 func SuccessfullyCreatePost(t testing.TB, driver CreatePostAction) {
-	status, got, err := driver.CreatePost(`title: "Test Post"`, `content: "Some content"`, `author: "Someone"`)
+	err := driver.BeConnected(`tag: "someone"`, `password: "123456"`)
+	assertNoError(t, err)
+
+	status, got, err := driver.CreatePost(`title: "Test Post"`, `content: "Some content"`, `author: "someone"`)
 	assertNoError(t, err)
 	assertHTTPStatus(t, status, http.StatusCreated)
 	want := map[string]any{
 		"title":   "Test Post",
 		"content": "Some content",
-		"author":  "Someone",
+		"author": map[string]any{
+			"tag": "someone",
+		},
 	}
 	data := extractData(t, got)
-	assertPostsCanBeTheSame(t, data, want)
+	assertCanBeTheSame(t, data, want, "didn't get expected post")
 	id, ok := data["id"]
 	if !ok {
 		t.Error("doesn't contain id in data")
@@ -43,12 +49,10 @@ func UnableToCreatePostDueToMissingRequiredValues(t testing.TB, driver CreatePos
 		{},
 		{`title: "Test Post"`},
 		{`content: "Some content"`},
-		{`author: "Someone"`},
-		{`title: "Test Post"`, `content: "Some content"`},
-		{`content: "Some content"`, `author: "Someone"`},
-		{`title: "Test Post"`, `author: "Someone"`},
 	}
 	for _, c := range cases {
+		err := driver.BeConnected(`tag: "someone"`, `password: "123456"`)
+		assertNoError(t, err)
 		status, got, err := driver.CreatePost(c...)
 		assertNoError(t, err)
 		assertHTTPStatus(t, status, http.StatusBadRequest)
@@ -62,6 +66,9 @@ func UnableToCreatePostDueToMissingRequiredValues(t testing.TB, driver CreatePos
 }
 
 func SuccessfullyReadPost(t testing.TB, driver ReadingPostAction) {
+	err := driver.BeConnected(`tag: "someone"`, `password: "123456"`)
+	assertNoError(t, err)
+
 	status, got, err := driver.ReadPost(keepingPostId)
 	assertNoError(t, err)
 	assertHTTPStatus(t, status, http.StatusOK)
@@ -69,13 +76,18 @@ func SuccessfullyReadPost(t testing.TB, driver ReadingPostAction) {
 		"id":      keepingPostId,
 		"title":   "Test Post",
 		"content": "Some content",
-		"author":  "Someone",
+		"author": map[string]any{
+			"tag": "someone",
+		},
 	}
 	data := extractData(t, got)
-	assertPostsCanBeTheSame(t, data, want)
+	assertCanBeTheSame(t, data, want, "didn't get expected post")
 }
 
 func TryToReadPostButCannotFindIt(t testing.TB, driver ReadingPostAction) {
+	err := driver.BeConnected(`tag: "someone"`, `password: "123456"`)
+	assertNoError(t, err)
+
 	status, _, err := driver.ReadPost("2")
 	assertNoError(t, err)
 	assertHTTPStatus(t, status, http.StatusNotFound)
@@ -179,15 +191,11 @@ func b_in_a(a, b map[string]any) bool {
 	return true
 }
 
-func assertPostsCanBeTheSame(t testing.TB, got, want map[string]any) {
+func assertCanBeTheSame(t testing.TB, got, want map[string]any, msgOnFail string) {
 	t.Helper()
 
-	fn := func(p map[string]any) string {
-		return fmt.Sprintf("{title=%s, content=%s, author=%s}", p["title"], p["content"], p["author"])
-	}
-
 	if !b_in_a(got, want) {
-		t.Fatalf("got post %s, but want %s", fn(got), fn(want))
+		t.Fatalf(msgOnFail)
 	}
 }
 

@@ -192,7 +192,7 @@ func TestPOSTPosts(t *testing.T) {
 	sessionCookie := login(t, server, "alex", "")
 
 	t.Run(`returns 201 and post after create post`, func(t *testing.T) {
-		request := newCreatePostRequest(sessionCookie, `{"title": "Post X", "content": "Post Content", "author": "1"}`)
+		request := newCreatePostRequest(sessionCookie, `{"title": "Post X", "content": "Post Content"}`)
 		response := httptest.NewRecorder()
 
 		server.ServeHTTP(response, request)
@@ -233,19 +233,6 @@ func TestPOSTPosts(t *testing.T) {
 
 			got := getErrorFromResponseModel(t, response.Body)
 			want := ErrMissingPostFields
-
-			assertGotError(t, got, want)
-		})
-		t.Run("nonexistent author", func(t *testing.T) {
-			request := newCreatePostRequest(sessionCookie, `{"title": "Post X", "content": "Post Content", "author": "2"}`)
-			response := httptest.NewRecorder()
-
-			server.ServeHTTP(response, request)
-
-			assertStatus(t, response, http.StatusBadRequest)
-
-			got := getErrorFromResponseModel(t, response.Body)
-			want := ErrNonexistentAuthor
 
 			assertGotError(t, got, want)
 		})
@@ -615,20 +602,6 @@ func TestPOSTComments(t *testing.T) {
 
 			got := getErrorFromResponseModel(t, response.Body)
 			want := ErrMissingCommentFields
-
-			assertGotError(t, got, want)
-		})
-
-		t.Run("nonexistent author", func(t *testing.T) {
-			request := newCreateCommentRequest(sessionCookie, "1", `{"content": "Comment Content", "author": "3"}`)
-			response := httptest.NewRecorder()
-
-			server.ServeHTTP(response, request)
-
-			assertStatus(t, response, http.StatusBadRequest)
-
-			got := getErrorFromResponseModel(t, response.Body)
-			want := ErrNonexistentAuthor
 
 			assertGotError(t, got, want)
 		})

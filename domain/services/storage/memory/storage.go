@@ -8,17 +8,19 @@ import (
 )
 
 type Storage struct {
-	customers_pk int
-	customers    map[string]entities.Customer
-	posts_pk     int
-	posts        map[string]entities.Post
-	comments     map[string]map[string]entities.Comment
+	customers_pk  int
+	customers     map[string]entities.Customer
+	customers_tag map[string]string
+	posts_pk      int
+	posts         map[string]entities.Post
+	comments      map[string]map[string]entities.Comment
 }
 
 func NewStorage() *Storage {
 	return &Storage{
 		1,
 		map[string]entities.Customer{},
+		map[string]string{},
 		1,
 		map[string]entities.Post{},
 		map[string]map[string]entities.Comment{},
@@ -60,7 +62,7 @@ func timeToString(t time.Time) string {
 
 func (s *Storage) CreatePost(post *entities.Post) error {
 
-	if post.Title == "" || post.Content == "" || post.Author == "" {
+	if post.Title == "" || post.Content == "" || post.Author == nil {
 		return storage.ErrMissingPostFields
 	}
 
@@ -141,7 +143,7 @@ func (s *Storage) GetComment(post, comment string) (*entities.Comment, error) {
 
 func (s *Storage) CreateComment(c *entities.Comment) error {
 
-	if c.Content == "" || c.Author == "" {
+	if c.Content == "" || c.Author == nil {
 		return storage.ErrMissingCommentFields
 	}
 
@@ -217,8 +219,16 @@ func (s *Storage) GetCustomer(id string) (*entities.Customer, error) {
 	}, nil
 }
 
-func (s *Storage) EditCustomer(id string, edit entities.CustomerInEditting) (*entities.Customer, error) {
-	found, ok := s.customers[id]
+func (s *Storage) GetCustomerByTag(tag string) (*entities.Customer, error) {
+	id, ok := s.customers_tag[tag]
+	if !ok {
+		return nil, nil
+	}
+	return s.GetCustomer(id)
+}
+
+func (s *Storage) EditCustomer(edit entities.CustomerInEditting) (*entities.Customer, error) {
+	found, ok := s.customers[edit.Id]
 	if !ok || found.DeletedAt != "" {
 		return nil, storage.ErrCustomerNotFound
 	}

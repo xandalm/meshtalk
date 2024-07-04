@@ -3,7 +3,7 @@ module meshtalk
 go 1.21.4
 
 require (
-	github.com/xandalm/go-router v0.0.0-20240418150541-808975c5018c
+	github.com/xandalm/go-router v0.0.0-20240703185336-7bf01845145a
 	github.com/xandalm/go-testing v0.0.0-20240325145107-950d80986f72
 )
 

@@ -17,6 +17,8 @@ func TestServer(t *testing.T) {
 		t.Skip()
 	}
 
+	t.Setenv("GO_ENV", "DEVELOPMENT")
+
 	var (
 		baseURL = "http://localhost:5000"
 		client  = &http.Client{
@@ -41,6 +43,8 @@ func TestServer(t *testing.T) {
 			log.Fatalf("unable to gracefully end the server, %v", err)
 		}
 	}()
+
+	specifications.SuccessfullyCreateCustomer(t, driver)
 
 	specifications.SuccessfullyCreatePost(t, driver)
 	specifications.UnableToCreatePostDueToMissingRequiredValues(t, driver)
