@@ -1,5 +1,5 @@
-github.com/xandalm/go-router v0.0.0-20240703185336-7bf01845145a h1:EA0GcbTkllQMkYk08BBUOaQ+Z+SnZT5g0aN7gIRRYEQ=
-github.com/xandalm/go-router v0.0.0-20240703185336-7bf01845145a/go.mod h1:YWRfDmLAQOMloz+hWZZmcvGp2iiK0vYY5NwfCKZpHQQ=
+github.com/xandalm/go-router v0.0.0-20240708190529-a725ef3ed8b1 h1:MOl1ptJinp0Q12/SbXLOvbygX6CoTWumW3/UIsAyIqQ=
+github.com/xandalm/go-router v0.0.0-20240708190529-a725ef3ed8b1/go.mod h1:YWRfDmLAQOMloz+hWZZmcvGp2iiK0vYY5NwfCKZpHQQ=
 github.com/xandalm/go-session v0.0.0-20240321183546-8d65c2940cd5 h1:hrUbKhgm3MZYrIoAKwvaWLVbmpNObVaNJ4seLWmVcSo=
 github.com/xandalm/go-session v0.0.0-20240321183546-8d65c2940cd5/go.mod h1:7X3iKbNCVAgWqPxZTH26IskwpPhwIochycrwx6apb+A=
 github.com/xandalm/go-testing v0.0.0-20240325145107-950d80986f72 h1:shMRL4lbSdQoV2jKbMvQyFU0MzY32k7O67qPNMmMK8s=

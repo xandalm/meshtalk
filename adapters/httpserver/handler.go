@@ -55,25 +55,27 @@ type CommentInput struct {
 }
 
 const (
-	ErrUnsupportedPostMessage       = "unsupported data to parse as post"
-	ErrMissingPostFieldsMessage     = "missing post fields (title, content and author are required)"
-	ErrUnsupportedCommentMessage    = "unsupported data to parse as comment"
-	ErrMissingCommentFieldsMessage  = "missing comment fields (content and author are required)"
-	ErrUnsupportedCustomerMessage   = "unsupported data to parse as customer"
-	ErrMissingCustomerFieldsMessage = "missing customer fields (name is required)"
-	ErrNothingToUpdateMessage       = "no changes to be updated"
-	ErrNonexistentCustomerMessage   = "the given author doesn't exist"
+	ErrUnsupportedContentTypeMessage = "content-type header property is required and must be application/json"
+	ErrUnsupportedPostMessage        = "unsupported data to parse as post"
+	ErrMissingPostFieldsMessage      = "missing post fields (title, content and author are required)"
+	ErrUnsupportedCommentMessage     = "unsupported data to parse as comment"
+	ErrMissingCommentFieldsMessage   = "missing comment fields (content and author are required)"
+	ErrUnsupportedCustomerMessage    = "unsupported data to parse as customer"
+	ErrMissingCustomerFieldsMessage  = "missing customer fields (name is required)"
+	ErrNothingToUpdateMessage        = "no changes to be updated"
+	ErrNonexistentCustomerMessage    = "the given author doesn't exist"
 )
 
 var (
-	ErrUnsupportedPost       = NewError("ERR_UNSUPPORTED_POST", ErrUnsupportedPostMessage)
-	ErrMissingPostFields     = NewError("ERR_MISSING_POST_FIELDS", ErrMissingPostFieldsMessage)
-	ErrUnsupportedComment    = NewError("ERR_UNSUPPORTED_COMMENT", ErrUnsupportedCommentMessage)
-	ErrMissingCommentFields  = NewError("ERR_MISSING_COMMENT_FIELDS", ErrMissingCommentFieldsMessage)
-	ErrUnsupportedCustomer   = NewError("ERR_UNSUPPORTED_CUSTOMER", ErrUnsupportedCustomerMessage)
-	ErrMissingCustomerFields = NewError("ERR_MISSING_CUSTOMER_FIELDS", ErrMissingCustomerFieldsMessage)
-	ErrNothingToUpdate       = NewError("ERR_NOTHING_TO_UPDATE", ErrNothingToUpdateMessage)
-	ErrNonexistentAuthor     = NewError("ERR_NONEXISTENT_AUTHOR", ErrNonexistentCustomerMessage)
+	ErrUnsupportedContentType = NewError("ERR_UNSUPPORTED_CONTENT_TYPE", ErrUnsupportedContentTypeMessage)
+	ErrUnsupportedPost        = NewError("ERR_UNSUPPORTED_POST", ErrUnsupportedPostMessage)
+	ErrMissingPostFields      = NewError("ERR_MISSING_POST_FIELDS", ErrMissingPostFieldsMessage)
+	ErrUnsupportedComment     = NewError("ERR_UNSUPPORTED_COMMENT", ErrUnsupportedCommentMessage)
+	ErrMissingCommentFields   = NewError("ERR_MISSING_COMMENT_FIELDS", ErrMissingCommentFieldsMessage)
+	ErrUnsupportedCustomer    = NewError("ERR_UNSUPPORTED_CUSTOMER", ErrUnsupportedCustomerMessage)
+	ErrMissingCustomerFields  = NewError("ERR_MISSING_CUSTOMER_FIELDS", ErrMissingCustomerFieldsMessage)
+	ErrNothingToUpdate        = NewError("ERR_NOTHING_TO_UPDATE", ErrNothingToUpdateMessage)
+	ErrNonexistentAuthor      = NewError("ERR_NONEXISTENT_AUTHOR", ErrNonexistentCustomerMessage)
 
 	overwrittenErrors = map[error]*Error{
 		storage.ErrPostNotFound:          nil,
@@ -116,29 +118,46 @@ func NewServer(storage storage.Storage) *Server {
 		to:             time.Minute,
 	}
 
+	s.router.UseFunc(func(w router.ResponseWriter, r *router.Request, next router.NextMiddlewareCaller) {
+		if r.Body == nil {
+			next()
+			return
+		}
+		_, err := r.Body.Read(make([]byte, 0))
+		if err != io.EOF && r.Header.Get("Content-Type") != "application/json" {
+			next(ErrUnsupportedContentType)
+			return
+		}
+		next()
+	})
+
 	s.router.PostFunc("/login", s.login)
 
-	customersNS := s.router.Namespace("customers")
-	customersNS.GetFunc("/{customer}", s.getCustomerHandler)
-	customersNS.PutFunc("/{customer}", s.editCustomerHandler)
-	customersNS.DeleteFunc("/{customer}", s.deleteCustomerHandler)
-	customersNS.PostFunc(s.createCustomerHandler)
+	nsCustomers := s.router.Namespace("customers")
+	nsCustomers.GetFunc("/{customer}", s.getCustomerHandler)
+	nsCustomers.PutFunc("/{customer}", s.editCustomerHandler)
+	nsCustomers.DeleteFunc("/{customer}", s.deleteCustomerHandler)
+	nsCustomers.PostFunc(s.createCustomerHandler)
 
-	postsNS := s.router.Namespace("posts")
-	postsNS.GetFunc("/{post}", s.getPostHandler)
-	postsNS.PutFunc("/{post}", s.editPostHandler)
-	postsNS.DeleteFunc("/{post}", s.deletePostHandler)
-	postsNS.GetFunc(s.getPostsHandler)
-	postsNS.PostFunc(s.createPostHandler)
+	nsPosts := s.router.Namespace("posts")
+	nsPosts.GetFunc("/{post}", s.getPostHandler)
+	nsPosts.PutFunc("/{post}", s.editPostHandler)
+	nsPosts.DeleteFunc("/{post}", s.deletePostHandler)
+	nsPosts.GetFunc(s.getPostsHandler)
+	nsPosts.PostFunc(s.createPostHandler)
 
-	postsCommentsNS := postsNS.Namespace("{post}/comments")
-	postsCommentsNS.GetFunc("/{comment}", s.getPostCommentHandler)
-	postsCommentsNS.PutFunc("/{comment}", s.editPostCommentHandler)
-	postsCommentsNS.DeleteFunc("/{comment}", s.deleteCommentHandler)
-	postsCommentsNS.GetFunc(s.getPostCommentsHandler)
-	postsCommentsNS.PostFunc(s.createPostCommentHandler)
+	nsPostsComments := nsPosts.Namespace("{post}/comments")
+	nsPostsComments.GetFunc("/{comment}", s.getPostCommentHandler)
+	nsPostsComments.PutFunc("/{comment}", s.editPostCommentHandler)
+	nsPostsComments.DeleteFunc("/{comment}", s.deleteCommentHandler)
+	nsPostsComments.GetFunc(s.getPostCommentsHandler)
+	nsPostsComments.PostFunc(s.createPostCommentHandler)
 
 	s.router.GetFunc("/comments", s.getCommentsHandler)
+
+	s.router.UseFunc(func(w router.ResponseWriter, r *router.Request, err error) {
+		s.writeResponseModelWithError(w, err)
+	})
 
 	return s
 }
@@ -182,7 +201,8 @@ func (s *Server) writeResponseModelWithError(w http.ResponseWriter, err error) {
 		ErrMissingCustomerFields,
 		ErrMissingPostFields,
 		ErrMissingCommentFields,
-		ErrNothingToUpdate:
+		ErrNothingToUpdate,
+		ErrUnsupportedContentType:
 		w.WriteHeader(http.StatusBadRequest)
 	default:
 		w.WriteHeader(http.StatusInternalServerError)
@@ -239,7 +259,7 @@ func (s *Server) login(w router.ResponseWriter, r *router.Request) {
 	}
 
 	if customer == nil && os.Getenv("GO_ENV") == "DEVELOPMENT" {
-		// Backdoor on dev environment allowing test routines
+		// Backdoor allowing test routines on dev environment
 		customer = entities.NewCustomer(credentials.Tag, credentials.Tag, credentials.Password)
 		if err := s.storage.CreateCustomer(customer); err != nil {
 			s.writeResponseModelWithError(w, err)

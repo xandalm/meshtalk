@@ -47,12 +47,17 @@ func getSessionCookie(response *httptest.ResponseRecorder) (*http.Cookie, error)
 	return sessionCookie, nil
 }
 
+func addContentType(req *http.Request) {
+	req.Header.Add("Content-Type", "application/json")
+}
+
 func login(t *testing.T, server *Server, tag, password string) *http.Cookie {
 	request, _ := http.NewRequest(
 		http.MethodPost,
 		"/login",
 		strings.NewReader(fmt.Sprintf(`{"tag": %q, "password": %q}`, tag, password)),
 	)
+	addContentType(request)
 	response := httptest.NewRecorder()
 	server.ServeHTTP(response, request)
 
@@ -62,6 +67,28 @@ func login(t *testing.T, server *Server, tag, password string) *http.Cookie {
 	}
 
 	return cookie
+}
+
+func TestContentTypeMiddleware(t *testing.T) {
+	storage := NewStubStorage()
+	server := NewServer(storage)
+
+	t.Setenv("GO_ENV", "DEVELOPMENT")
+
+	sessionCookie := login(t, server, "alex", "123456")
+
+	t.Run("returns error by unsupported body content type", func(t *testing.T) {
+		req, _ := http.NewRequest(http.MethodPost, "/posts", strings.NewReader(`title=Title&content=Content`))
+		req.AddCookie(sessionCookie)
+		res := httptest.NewRecorder()
+
+		server.ServeHTTP(res, req)
+
+		assertStatus(t, res, http.StatusBadRequest)
+
+		err := getErrorFromResponseModel(t, res.Body)
+		assertGotError(t, err, ErrUnsupportedContentType)
+	})
 }
 
 func TestGETPosts(t *testing.T) {
@@ -1077,12 +1104,14 @@ func newGetPostRequest(cookie *http.Cookie, id string) *http.Request {
 func newCreatePostRequest(cookie *http.Cookie, jsonRaw string) *http.Request {
 	req, _ := http.NewRequest(http.MethodPost, "/posts", strings.NewReader(jsonRaw))
 	req.AddCookie(cookie)
+	addContentType(req)
 	return req
 }
 
 func newEditPostRequest(cookie *http.Cookie, id, jsonRaw string) *http.Request {
 	req, _ := http.NewRequest(http.MethodPut, "/posts/"+id, strings.NewReader(jsonRaw))
 	req.AddCookie(cookie)
+	addContentType(req)
 	return req
 }
 
@@ -1118,12 +1147,14 @@ func newGetPostCommentsRequest(cookie *http.Cookie, postId, commentId string) *h
 func newCreateCommentRequest(cookie *http.Cookie, post, jsonRaw string) *http.Request {
 	req, _ := http.NewRequest(http.MethodPost, "/posts/"+post+"/comments", strings.NewReader(jsonRaw))
 	req.AddCookie(cookie)
+	addContentType(req)
 	return req
 }
 
 func newEditCommentRequest(cookie *http.Cookie, postId, commentId, jsonRaw string) *http.Request {
 	req, _ := http.NewRequest(http.MethodPut, "/posts/"+postId+"/comments/"+commentId, strings.NewReader(jsonRaw))
 	req.AddCookie(cookie)
+	addContentType(req)
 	return req
 }
 
@@ -1135,6 +1166,7 @@ func newDeleteCommentRequest(cookie *http.Cookie, postId, commentId string) *htt
 
 func newCreateCustomerRequest(jsonRaw string) *http.Request {
 	req, _ := http.NewRequest(http.MethodPost, "/customers", strings.NewReader(jsonRaw))
+	addContentType(req)
 	return req
 }
 
@@ -1147,6 +1179,7 @@ func newGetCustomerRequest(cookie *http.Cookie, customerId string) *http.Request
 func newEditCustomerRequest(cookie *http.Cookie, customerId, jsonRaw string) *http.Request {
 	req, _ := http.NewRequest(http.MethodPut, "/customers/"+customerId, strings.NewReader(jsonRaw))
 	req.AddCookie(cookie)
+	addContentType(req)
 	return req
 }
 

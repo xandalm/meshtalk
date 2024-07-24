@@ -46,7 +46,7 @@ func (d *Driver) BeConnected(args ...string) error {
 
 	body := createJSONBody(ParseArgs(args...))
 
-	status, headers, _, err := d.doPost(d.BaseURL+"/login", "json", body)
+	status, headers, _, err := d.doPost(d.BaseURL+"/login", "application/json", body)
 
 	if err != nil {
 		return err
@@ -89,7 +89,7 @@ func (d *Driver) CreateCustomer(args ...string) (int, string, error) {
 
 	body := createJSONBody(ParseArgs(args...))
 
-	status, _, _body, err := d.doPost(d.BaseURL+"/customers", "json", body)
+	status, _, _body, err := d.doPost(d.BaseURL+"/customers", "application/json", body)
 
 	return status, _body, err
 }
@@ -98,7 +98,7 @@ func (d *Driver) CreatePost(args ...string) (int, string, error) {
 
 	body := createJSONBody(ParseArgs(args...))
 
-	status, _, _body, err := d.doPost(d.BaseURL+"/posts", "json", body)
+	status, _, _body, err := d.doPost(d.BaseURL+"/posts", "application/json", body)
 
 	return status, _body, err
 }
