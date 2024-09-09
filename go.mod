@@ -7,4 +7,4 @@ require (
 	github.com/xandalm/go-testing v0.0.0-20240325145107-950d80986f72
 )
 
-require github.com/xandalm/go-session v0.0.0-20240321183546-8d65c2940cd5
+require github.com/xandalm/go-session v0.0.0-20240905203240-87e567be5c2c

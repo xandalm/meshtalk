@@ -6,5 +6,9 @@ github.com/xandalm/go-router v0.0.0-20240724181949-9c107934c391 h1:nxAONL4Sjg2Cl
 github.com/xandalm/go-router v0.0.0-20240724181949-9c107934c391/go.mod h1:YWRfDmLAQOMloz+hWZZmcvGp2iiK0vYY5NwfCKZpHQQ=
 github.com/xandalm/go-session v0.0.0-20240321183546-8d65c2940cd5 h1:hrUbKhgm3MZYrIoAKwvaWLVbmpNObVaNJ4seLWmVcSo=
 github.com/xandalm/go-session v0.0.0-20240321183546-8d65c2940cd5/go.mod h1:7X3iKbNCVAgWqPxZTH26IskwpPhwIochycrwx6apb+A=
+github.com/xandalm/go-session v0.0.0-20240903193117-2f0e9bf6ae30 h1:g8MnlLoELzgdncnfQWR0+WkG7PPvjrhtxrtXzaihLSI=
+github.com/xandalm/go-session v0.0.0-20240903193117-2f0e9bf6ae30/go.mod h1:7X3iKbNCVAgWqPxZTH26IskwpPhwIochycrwx6apb+A=
+github.com/xandalm/go-session v0.0.0-20240905203240-87e567be5c2c h1:1C3SWplVNGr8YU6QqreqvGtizDZ7XGyQCOq52eElTrc=
+github.com/xandalm/go-session v0.0.0-20240905203240-87e567be5c2c/go.mod h1:7X3iKbNCVAgWqPxZTH26IskwpPhwIochycrwx6apb+A=
 github.com/xandalm/go-testing v0.0.0-20240325145107-950d80986f72 h1:shMRL4lbSdQoV2jKbMvQyFU0MzY32k7O67qPNMmMK8s=
 github.com/xandalm/go-testing v0.0.0-20240325145107-950d80986f72/go.mod h1:a4iGzX59CePssy/cQXcNBQBCuX8+cFTU2EF1xCuoCdA=

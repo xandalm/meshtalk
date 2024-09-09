@@ -9,11 +9,12 @@ import (
 	"meshtalk/domain/services/storage"
 	"net/http"
 	"os"
+	"path/filepath"
 	"time"
 
 	router "github.com/xandalm/go-router"
 	"github.com/xandalm/go-session"
-	"github.com/xandalm/go-session/memory"
+	"github.com/xandalm/go-session/filesystem"
 )
 
 type Error struct {
@@ -94,27 +95,17 @@ func SessionCookieName() string {
 }
 
 type Server struct {
-	storage        storage.Storage
-	router         *router.Router
-	sessionManager *session.Manager
-	to             time.Duration
+	storage storage.Storage
+	router  *router.Router
+	to      time.Duration
 }
 
 func NewServer(storage storage.Storage) *Server {
-	sm := session.NewManager(
-		session.NewProvider(
-			memory.Storage(),
-			session.SecondsAgeCheckerAdapter,
-		),
-		sessionCookieName,
-		int64(24*time.Hour/time.Second),
-	)
-	sm.GC()
+	session.Config(sessionCookieName, int64(24*time.Hour/time.Second), session.DefaultSessionFactory, filesystem.NewStorage(filepath.Join(os.TempDir(), "MeshtalkSessions"), ""))
 	s := &Server{
-		storage:        storage,
-		router:         &router.Router{},
-		sessionManager: sm,
-		to:             time.Minute,
+		storage: storage,
+		router:  &router.Router{},
+		to:      time.Minute,
 	}
 
 	s.router.UseFunc(func(w router.ResponseWriter, r *router.Request, next router.NextMiddlewareCaller) {
@@ -271,17 +262,17 @@ func (s *Server) login(w router.ResponseWriter, r *router.Request) {
 		return
 	}
 
-	session := s.sessionManager.StartSession(w.(http.ResponseWriter), r.Request)
+	sess := session.Start(w.(http.ResponseWriter), r.Request)
 
-	if err := session.Set("customer", *customer); err != nil {
-		s.sessionManager.DestroySession(w.(http.ResponseWriter), r.Request)
+	if err := sess.Set("customer", *customer); err != nil {
+		session.Destroy(w.(http.ResponseWriter), r.Request)
 		w.SetStatus(http.StatusInternalServerError)
 	}
 }
 
 func (s *Server) createCustomerHandler(w router.ResponseWriter, r *router.Request) {
-	session := s.sessionManager.StartSession(w.(http.ResponseWriter), r.Request)
-	if s.isLogged(session) {
+	sess := session.Start(w.(http.ResponseWriter), r.Request)
+	if s.isLogged(sess) {
 		w.SetStatus(http.StatusUnauthorized)
 		return
 	}
@@ -310,8 +301,8 @@ func (s *Server) createCustomerHandler(w router.ResponseWriter, r *router.Reques
 }
 
 func (s *Server) getCustomerHandler(w router.ResponseWriter, r *router.Request) {
-	session := s.sessionManager.StartSession(w.(http.ResponseWriter), r.Request)
-	if !s.isLogged(session) {
+	sess := session.Start(w.(http.ResponseWriter), r.Request)
+	if !s.isLogged(sess) {
 		w.SetStatus(http.StatusUnauthorized)
 		return
 	}
@@ -330,15 +321,15 @@ func (s *Server) getCustomerHandler(w router.ResponseWriter, r *router.Request) 
 }
 
 func (s *Server) editCustomerHandler(w router.ResponseWriter, r *router.Request) {
-	session := s.sessionManager.StartSession(w.(http.ResponseWriter), r.Request)
-	if !s.isLogged(session) {
+	sess := session.Start(w.(http.ResponseWriter), r.Request)
+	if !s.isLogged(sess) {
 		w.SetStatus(http.StatusUnauthorized)
 		return
 	}
 
 	customer := r.Params()["customer"]
 
-	if c, ok := session.Get("customer").(entities.Customer); !ok || c.Id != customer {
+	if c, ok := sess.Get("customer").(entities.Customer); !ok || c.Id != customer {
 		w.SetStatus(http.StatusUnauthorized)
 		return
 	}
@@ -368,7 +359,7 @@ func (s *Server) editCustomerHandler(w router.ResponseWriter, r *router.Request)
 }
 
 func (s *Server) deleteCustomerHandler(w router.ResponseWriter, r *router.Request) {
-	session := s.sessionManager.StartSession(w.(http.ResponseWriter), r.Request)
+	session := session.Start(w.(http.ResponseWriter), r.Request)
 	if !s.isLogged(session) {
 		w.SetStatus(http.StatusUnauthorized)
 		return
@@ -388,13 +379,13 @@ func (s *Server) deleteCustomerHandler(w router.ResponseWriter, r *router.Reques
 }
 
 func (s *Server) createPostHandler(w router.ResponseWriter, r *router.Request) {
-	session := s.sessionManager.StartSession(w.(http.ResponseWriter), r.Request)
-	if !s.isLogged(session) {
+	sess := session.Start(w.(http.ResponseWriter), r.Request)
+	if !s.isLogged(sess) {
 		w.SetStatus(http.StatusUnauthorized)
 		return
 	}
 
-	author := session.Get("customer").(entities.Customer)
+	author := sess.Get("customer").(entities.Customer)
 
 	var input PostInput
 	err := r.ParseBodyInto(&input)
@@ -422,8 +413,8 @@ func (s *Server) createPostHandler(w router.ResponseWriter, r *router.Request) {
 }
 
 func (s *Server) getPostHandler(w router.ResponseWriter, r *router.Request) {
-	session := s.sessionManager.StartSession(w.(http.ResponseWriter), r.Request)
-	if !s.isLogged(session) {
+	sess := session.Start(w.(http.ResponseWriter), r.Request)
+	if !s.isLogged(sess) {
 		w.SetStatus(http.StatusUnauthorized)
 		return
 	}
@@ -443,8 +434,8 @@ func (s *Server) getPostHandler(w router.ResponseWriter, r *router.Request) {
 }
 
 func (s *Server) getPostsHandler(w router.ResponseWriter, r *router.Request) {
-	session := s.sessionManager.StartSession(w.(http.ResponseWriter), r.Request)
-	if !s.isLogged(session) {
+	sess := session.Start(w.(http.ResponseWriter), r.Request)
+	if !s.isLogged(sess) {
 		w.SetStatus(http.StatusUnauthorized)
 		return
 	}
@@ -458,8 +449,8 @@ func (s *Server) getPostsHandler(w router.ResponseWriter, r *router.Request) {
 }
 
 func (s *Server) editPostHandler(w router.ResponseWriter, r *router.Request) {
-	session := s.sessionManager.StartSession(w.(http.ResponseWriter), r.Request)
-	if !s.isLogged(session) {
+	sess := session.Start(w.(http.ResponseWriter), r.Request)
+	if !s.isLogged(sess) {
 		w.SetStatus(http.StatusUnauthorized)
 		return
 	}
@@ -493,8 +484,8 @@ func (s *Server) editPostHandler(w router.ResponseWriter, r *router.Request) {
 }
 
 func (s *Server) deletePostHandler(w router.ResponseWriter, r *router.Request) {
-	session := s.sessionManager.StartSession(w.(http.ResponseWriter), r.Request)
-	if !s.isLogged(session) {
+	sess := session.Start(w.(http.ResponseWriter), r.Request)
+	if !s.isLogged(sess) {
 		w.SetStatus(http.StatusUnauthorized)
 		return
 	}
@@ -508,8 +499,8 @@ func (s *Server) deletePostHandler(w router.ResponseWriter, r *router.Request) {
 }
 
 func (s *Server) getCommentsHandler(w router.ResponseWriter, r *router.Request) {
-	session := s.sessionManager.StartSession(w.(http.ResponseWriter), r.Request)
-	if !s.isLogged(session) {
+	sess := session.Start(w.(http.ResponseWriter), r.Request)
+	if !s.isLogged(sess) {
 		w.SetStatus(http.StatusUnauthorized)
 		return
 	}
@@ -546,8 +537,8 @@ func (s *Server) getCommentsHandler(w router.ResponseWriter, r *router.Request) 
 }
 
 func (s *Server) getPostCommentHandler(w router.ResponseWriter, r *router.Request) {
-	session := s.sessionManager.StartSession(w.(http.ResponseWriter), r.Request)
-	if !s.isLogged(session) {
+	sess := session.Start(w.(http.ResponseWriter), r.Request)
+	if !s.isLogged(sess) {
 		w.SetStatus(http.StatusUnauthorized)
 		return
 	}
@@ -571,8 +562,8 @@ func (s *Server) getPostCommentHandler(w router.ResponseWriter, r *router.Reques
 }
 
 func (s *Server) getPostCommentsHandler(w router.ResponseWriter, r *router.Request) {
-	session := s.sessionManager.StartSession(w.(http.ResponseWriter), r.Request)
-	if !s.isLogged(session) {
+	sess := session.Start(w.(http.ResponseWriter), r.Request)
+	if !s.isLogged(sess) {
 		w.SetStatus(http.StatusUnauthorized)
 		return
 	}
@@ -591,13 +582,13 @@ func (s *Server) getPostCommentsHandler(w router.ResponseWriter, r *router.Reque
 }
 
 func (s *Server) createPostCommentHandler(w router.ResponseWriter, r *router.Request) {
-	session := s.sessionManager.StartSession(w.(http.ResponseWriter), r.Request)
-	if !s.isLogged(session) {
+	sess := session.Start(w.(http.ResponseWriter), r.Request)
+	if !s.isLogged(sess) {
 		w.SetStatus(http.StatusUnauthorized)
 		return
 	}
 
-	author := session.Get("customer").(entities.Customer)
+	author := sess.Get("customer").(entities.Customer)
 
 	post := r.Params()["post"]
 
@@ -624,8 +615,8 @@ func (s *Server) createPostCommentHandler(w router.ResponseWriter, r *router.Req
 }
 
 func (s *Server) editPostCommentHandler(w router.ResponseWriter, r *router.Request) {
-	session := s.sessionManager.StartSession(w.(http.ResponseWriter), r.Request)
-	if !s.isLogged(session) {
+	sess := session.Start(w.(http.ResponseWriter), r.Request)
+	if !s.isLogged(sess) {
 		w.SetStatus(http.StatusUnauthorized)
 		return
 	}
@@ -658,8 +649,8 @@ func (s *Server) editPostCommentHandler(w router.ResponseWriter, r *router.Reque
 }
 
 func (s *Server) deleteCommentHandler(w router.ResponseWriter, r *router.Request) {
-	session := s.sessionManager.StartSession(w.(http.ResponseWriter), r.Request)
-	if !s.isLogged(session) {
+	sess := session.Start(w.(http.ResponseWriter), r.Request)
+	if !s.isLogged(sess) {
 		w.SetStatus(http.StatusUnauthorized)
 		return
 	}
