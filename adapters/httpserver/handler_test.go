@@ -268,7 +268,7 @@ func TestPUTPosts(t *testing.T) {
 
 		if !slices.Contains(
 			storage.postEditCalls,
-			`Id="1", Content="Edited Content"`,
+			`Id="1", Title="Post 1", Content="Edited Content"`,
 		) {
 			t.Errorf("didn't update post")
 		}
@@ -815,9 +815,9 @@ func TestPUTCustomers(t *testing.T) {
 			raw  string
 			want string
 		}{
-			{`{"name": "Jhonny"}`, `Id="1", Name="Jhonny"`},
-			{`{"password": "654321"}`, `Id="1", Password="654321"`},
-			{`{"name": "Jhon", "password": "123456"}`, `Id="1", Name="Jhon", Password="123456"`},
+			{`{"Name": "John James"}`, `Id="1", Tag="john", Name="John James", Password="123456"`},
+			{`{"Password": "654321"}`, `Id="1", Tag="john", Name="John James", Password="654321"`},
+			{`{"Name": "John", "Password": "123456"}`, `Id="1", Tag="john", Name="John", Password="123456"`},
 		}
 
 		for _, c := range cases {

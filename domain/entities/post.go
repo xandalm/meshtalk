@@ -19,12 +19,3 @@ func NewPost(title, content string, author *Customer) *Post {
 		Author:  author,
 	}
 }
-
-// It's like a helper to expose editable fields of the Post.
-// The editable fields are pointers because this way is possible
-// to keep them optional to be edited.
-type PostInEditting struct {
-	Id      string
-	Title   *string
-	Content *string
-}

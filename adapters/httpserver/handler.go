@@ -2,6 +2,7 @@ package httpserver
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -327,31 +328,44 @@ func (s *Server) editCustomerHandler(w router.ResponseWriter, r *router.Request)
 		return
 	}
 
-	customer := r.Params()["customer"]
+	customerId := r.Params()["customer"]
 
-	if c, ok := sess.Get("customer").(entities.Customer); !ok || c.Id != customer {
+	if c, ok := sess.Get("customer").(entities.Customer); !ok || c.Id != customerId {
 		w.SetStatus(http.StatusUnauthorized)
 		return
 	}
 
-	var input CustomerInput
-	if err := r.ParseBodyInto(&input); err != nil {
+	customer, err := s.storage.GetCustomer(customerId)
+	if err != nil {
+		s.writeResponseModelWithError(w, err)
+	}
+	if customer == nil {
+		w.SetStatus(http.StatusNotFound)
+		return
+	}
+
+	var input map[string]any
+	if err := json.NewDecoder(r.Body).Decode(&input); err != nil {
 		s.writeResponseModelWithError(w, ErrUnsupportedCustomer)
 		return
 	}
 
-	edit := entities.CustomerInEditting{
-		Name:     input.Name,
-		Password: input.Password,
+	unchanged := true
+	if name, ok := input["Name"]; ok {
+		customer.Name = name.(string)
+		unchanged = false
+	}
+	if password, ok := input["Password"]; ok {
+		customer.Password = password.(string)
+		unchanged = false
 	}
 
-	if edit.Name == nil && edit.Password == nil {
+	if unchanged {
 		s.writeResponseModelWithError(w, ErrNothingToUpdate)
 		return
 	}
-	edit.Id = customer
 
-	if _, err := s.storage.EditCustomer(edit); err != nil {
+	if err := s.storage.EditCustomer(customer); err != nil {
 		s.writeResponseModelWithError(w, err)
 	}
 
@@ -455,27 +469,41 @@ func (s *Server) editPostHandler(w router.ResponseWriter, r *router.Request) {
 		return
 	}
 
-	params := r.Params()
+	postId := r.Params()["post"]
 
-	var input PostInput
-	err := r.ParseBodyInto(&input)
+	post, err := s.storage.GetPost(postId)
 	if err != nil {
+		s.writeResponseModelWithError(w, err)
+		return
+	}
+	if post == nil {
+		w.SetStatus(http.StatusNotFound)
+		return
+	}
+
+	var input map[string]any
+
+	if err := json.NewDecoder(r.Body).Decode(&input); err != nil {
 		s.writeResponseModelWithError(w, ErrUnsupportedPost)
 		return
 	}
 
-	edit := entities.PostInEditting{
-		Title:   input.Title,
-		Content: input.Content,
+	unchanged := true
+	if title, ok := input["Title"]; ok {
+		post.Title = title.(string)
+		unchanged = false
 	}
-	edit.Id = params["post"]
+	if content, ok := input["Content"]; ok {
+		post.Content = content.(string)
+		unchanged = false
+	}
 
-	if edit.Title == nil && edit.Content == nil {
+	if unchanged {
 		s.writeResponseModelWithError(w, ErrNothingToUpdate)
 		return
 	}
 
-	if _, err := s.storage.EditPost(edit); err != nil {
+	if err := s.storage.EditPost(post); err != nil {
 		s.writeResponseModelWithError(w, err)
 		return
 	}
@@ -622,25 +650,33 @@ func (s *Server) editPostCommentHandler(w router.ResponseWriter, r *router.Reque
 	}
 
 	params := r.Params()
+	postId := params["post"]
+	commentId := params["comment"]
 
-	var input CommentInput
-	if err := r.ParseBodyInto(&input); err != nil {
+	comment, err := s.storage.GetComment(postId, commentId)
+	if err != nil {
+		s.writeResponseModelWithError(w, err)
+		return
+	}
+	if comment == nil {
+		w.SetStatus(http.StatusNotFound)
+		return
+	}
+
+	var input map[string]any
+	if err := json.NewDecoder(r.Body).Decode(&input); err != nil {
 		s.writeResponseModelWithError(w, ErrUnsupportedComment)
 		return
 	}
 
-	edit := entities.CommentInEditting{
-		Post:    params["post"],
-		Id:      params["comment"],
-		Content: input.Content,
-	}
-
-	if edit.Content == nil {
+	if content, ok := input["Content"]; ok {
+		comment.Content = content.(string)
+	} else {
 		s.writeResponseModelWithError(w, ErrNothingToUpdate)
 		return
 	}
 
-	if _, err := s.storage.EditComment(edit); err != nil {
+	if err := s.storage.EditComment(comment); err != nil {
 		s.writeResponseModelWithError(w, err)
 		return
 	}

@@ -40,7 +40,7 @@ type Storage interface {
 	// ErrCustomerNotFound,
 	// ErrMissingCustomerFields.
 	// Any other error is a uncategorized for storage interface.
-	EditCustomer(edit entities.CustomerInEditting) (*entities.Customer, error)
+	EditCustomer(customer *entities.Customer) error
 
 	// Delete customer data.
 	//
@@ -71,7 +71,7 @@ type Storage interface {
 	// ErrPostNotFound,
 	// ErrMissingPostFields.
 	// Any other error is a uncategorized for storage interface.
-	EditPost(edit entities.PostInEditting) (*entities.Post, error)
+	EditPost(post *entities.Post) error
 
 	// Delete post data.
 	//
@@ -107,7 +107,7 @@ type Storage interface {
 	// ErrPostNotFound,
 	// ErrMissingCommentFields.
 	// Any other error is a uncategorized for storage interface.
-	EditComment(edit entities.CommentInEditting) (*entities.Comment, error)
+	EditComment(comment *entities.Comment) error
 
 	// Delete comment data.
 	//

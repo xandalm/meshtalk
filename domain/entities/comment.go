@@ -19,12 +19,3 @@ func NewComment(post, content string, author *Customer) *Comment {
 		Author:  author,
 	}
 }
-
-// It's like a helper to expose editable fields of the Comment.
-// The editable fields are pointers because this way is possible
-// to keep them optional to be edited.
-type CommentInEditting struct {
-	Post    string
-	Id      string
-	Content *string
-}
