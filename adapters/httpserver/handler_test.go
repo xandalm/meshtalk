@@ -815,9 +815,9 @@ func TestPUTCustomers(t *testing.T) {
 			raw  string
 			want string
 		}{
-			{`{"Name": "John James"}`, `Id="1", Tag="john", Name="John James", Password="123456"`},
-			{`{"Password": "654321"}`, `Id="1", Tag="john", Name="John James", Password="654321"`},
-			{`{"Name": "John", "Password": "123456"}`, `Id="1", Tag="john", Name="John", Password="123456"`},
+			{`{"name": "John James"}`, `Id="1", Tag="john", Name="John James", Password="123456"`},
+			{`{"password": "654321"}`, `Id="1", Tag="john", Name="John James", Password="654321"`},
+			{`{"name": "John", "password": "123456"}`, `Id="1", Tag="john", Name="John", Password="123456"`},
 		}
 
 		for _, c := range cases {

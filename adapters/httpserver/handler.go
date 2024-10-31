@@ -351,11 +351,11 @@ func (s *Server) editCustomerHandler(w router.ResponseWriter, r *router.Request)
 	}
 
 	unchanged := true
-	if name, ok := input["Name"]; ok {
+	if name, ok := input["name"]; ok {
 		customer.Name = name.(string)
 		unchanged = false
 	}
-	if password, ok := input["Password"]; ok {
+	if password, ok := input["password"]; ok {
 		customer.Password = password.(string)
 		unchanged = false
 	}
